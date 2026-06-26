@@ -5,11 +5,15 @@ from dotenv import load_dotenv, set_key
 from datetime import datetime
 import psutil
 import requests
+from src.core.ollama_client import OllamaClient
 
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("dark-blue")
 
-ENV_PATH = os.path.join(os.path.dirname(__file__), "..", "..", ".env")
+BASE_DIR = os.path.join(os.path.dirname(__file__), "..", "..")
+ENV_PATH = os.path.join(BASE_DIR, ".env")
+SOUL_PATH = os.path.join(BASE_DIR, "soul.md")
+MEMORY_PATH = os.path.join(BASE_DIR, "memoria.json")
 BG_COLOR = "#06080f"
 PANEL_COLOR = "#0b0f1a"
 BORDER_COLOR = "#1a2a44"
@@ -270,8 +274,69 @@ class MainWindow:
 
         self.sys_stats = {"cpu": 0, "ram_pct": 0, "ram_used": 0, "ram_total": 0, "disk_used": 0, "disk_total": 0}
         self.weather_data = None
+        self.ollama = OllamaClient(api_key=os.getenv("OLLAMA_API_KEY", ""))
+        self.ollama_models = []
+        self.ollama_verified = False
+
+        system_prompt = self._load_soul()
+        self.messages = [{"role": "system", "content": system_prompt}]
 
         self._build()
+        self._load_chat_history()
+        self.window.after(500, self._auto_verify_ollama)
+
+    def _auto_verify_ollama(self):
+        key = os.getenv("OLLAMA_API_KEY", "")
+        if key:
+            self.ollama.set_api_key(key)
+            def work():
+                ok, msg = self.ollama.verify()
+                if ok:
+                    models = self.ollama.list_models(force=True) or []
+                    self.ollama_models = models
+                    self.ollama_verified = True
+                    model_ids = [m["id"] for m in models] if models else []
+                    self.window.after(0, lambda: self._on_verify_success(msg, model_ids))
+            threading.Thread(target=work, daemon=True).start()
+
+    def _load_soul(self):
+        try:
+            with open(SOUL_PATH, "r", encoding="utf-8") as f:
+                return f.read().strip()
+        except Exception:
+            return "Eres ATLAS, un asistente personal inteligente. Responde en español."
+
+    def _load_memory(self):
+        try:
+            with open(MEMORY_PATH, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                return data.get("messages", [])
+        except Exception:
+            return []
+
+    def _save_memory(self):
+        try:
+            history = [m for m in self.messages if m["role"] != "system"]
+            with open(MEMORY_PATH, "w", encoding="utf-8") as f:
+                json.dump({"messages": history[-50:]}, f, ensure_ascii=False, indent=2)
+        except Exception:
+            pass
+
+    def _clear_memory(self):
+        self.messages = [m for m in self.messages if m["role"] == "system"]
+        self._save_memory()
+        for w in self.chat_inner.winfo_children():
+            w.destroy()
+        self._add_chat_message("assistant", self._tr("welcome_msg"))
+
+    def _load_chat_history(self):
+        history = self._load_memory()
+        if not history:
+            self._add_chat_message("assistant", self._tr("welcome_msg"))
+            return
+        for m in history[-30:]:
+            self._add_chat_message(m["role"], m["content"])
+            self.messages.append(m)
 
     def _tr(self, key):
         if key in self.tr:
@@ -466,11 +531,14 @@ class MainWindow:
         boxes = ctk.CTkFrame(p, fg_color="transparent")
         boxes.grid(row=3, column=0, padx=12, pady=(10, 4), sticky="ew")
         boxes.grid_columnconfigure((0, 1), weight=1)
-        self.sys_boxes = {}
-        for i, k in enumerate(["cpu_box", "mem_box"]):
+        self.sys_box_labels = {}
+        for i, (k, label) in enumerate([("cpu_box", self._tr("cpu_box")), ("mem_box", self._tr("mem_box"))]):
             b = ctk.CTkFrame(boxes, fg_color="#0a1220", corner_radius=6)
             b.grid(row=0, column=i, sticky="ew", padx=2)
-            self.sys_boxes[k] = b
+            ctk.CTkLabel(b, text=label, font=ctk.CTkFont(size=FONT_XS), text_color=TEXT_DIM).pack()
+            val = ctk.CTkLabel(b, text="--", font=ctk.CTkFont(size=FONT_MD, weight="bold"), text_color=ACCENT)
+            val.pack()
+            self.sys_box_labels[k] = val
 
         self.disk_lbl = ctk.CTkLabel(p, text=self._tr("disk") + ": --", font=ctk.CTkFont(size=FONT_XS), text_color=TEXT_DIM)
         self.disk_lbl.grid(row=4, column=0, padx=12, pady=(4, 10), sticky="w")
@@ -486,22 +554,10 @@ class MainWindow:
             vl.configure(text=f"{s['ram_used']} GB / {s['ram_total']} GB")
             bar.set(s["ram_pct"] / 100)
 
-        if "cpu_box" in self.sys_boxes:
-            b = self.sys_boxes["cpu_box"]
-            for w in b.winfo_children():
-                w.destroy()
-            ctk.CTkLabel(b, text=self._tr("cpu_box"), font=ctk.CTkFont(size=FONT_XS),
-                text_color=TEXT_DIM).pack()
-            ctk.CTkLabel(b, text=f"{s['cpu']}%", font=ctk.CTkFont(size=FONT_MD, weight="bold"),
-                text_color=ACCENT).pack()
-        if "mem_box" in self.sys_boxes:
-            b = self.sys_boxes["mem_box"]
-            for w in b.winfo_children():
-                w.destroy()
-            ctk.CTkLabel(b, text=self._tr("mem_box"), font=ctk.CTkFont(size=FONT_XS),
-                text_color=TEXT_DIM).pack()
-            ctk.CTkLabel(b, text=f"{s['ram_pct']}%", font=ctk.CTkFont(size=FONT_MD, weight="bold"),
-                text_color=ACCENT).pack()
+        if "cpu_box" in self.sys_box_labels:
+            self.sys_box_labels["cpu_box"].configure(text=f"{s['cpu']}%")
+        if "mem_box" in self.sys_box_labels:
+            self.sys_box_labels["mem_box"].configure(text=f"{s['ram_pct']}%")
 
         self.disk_lbl.configure(text=f"{self._tr('disk')}: {s['disk_used']} / {s['disk_total']} GB")
 
@@ -603,11 +659,14 @@ class MainWindow:
         boxes = ctk.CTkFrame(p, fg_color="transparent")
         boxes.grid(row=3, column=0, padx=12, pady=(6, 2), sticky="ew")
         boxes.grid_columnconfigure((0, 1), weight=1)
-        self.uptime_boxes = {}
-        for i, k in enumerate(["session", "commands"]):
+        self.uptime_box_labels = {}
+        for i, (k, label) in enumerate([("session", self._tr("session")), ("commands", self._tr("commands"))]):
             b = ctk.CTkFrame(boxes, fg_color="#0a1220", corner_radius=6)
             b.grid(row=0, column=i, sticky="ew", padx=2)
-            self.uptime_boxes[k] = b
+            ctk.CTkLabel(b, text=label, font=ctk.CTkFont(size=FONT_XS), text_color=TEXT_DIM).pack()
+            val = ctk.CTkLabel(b, text="--", font=ctk.CTkFont(size=FONT_MD, weight="bold"), text_color=ACCENT)
+            val.pack()
+            self.uptime_box_labels[k] = val
 
         load_f = ctk.CTkFrame(p, fg_color="transparent")
         load_f.grid(row=4, column=0, padx=12, pady=(4, 10), sticky="ew")
@@ -634,19 +693,10 @@ class MainWindow:
             self.load_pct_lbl.configure(text=f"{self._tr('moderate')} {load_pct}%")
             self.load_bar.set(load_pct / 100)
 
-            for w in self.uptime_boxes["session"].winfo_children():
-                w.destroy()
-            ctk.CTkLabel(self.uptime_boxes["session"], text=self._tr("session"),
-                font=ctk.CTkFont(size=FONT_XS), text_color=TEXT_DIM).pack()
-            ctk.CTkLabel(self.uptime_boxes["session"], text="1",
-                font=ctk.CTkFont(size=FONT_MD, weight="bold"), text_color=ACCENT).pack()
-
-            for w in self.uptime_boxes["commands"].winfo_children():
-                w.destroy()
-            ctk.CTkLabel(self.uptime_boxes["commands"], text=self._tr("commands"),
-                font=ctk.CTkFont(size=FONT_XS), text_color=TEXT_DIM).pack()
-            ctk.CTkLabel(self.uptime_boxes["commands"], text="0",
-                font=ctk.CTkFont(size=FONT_MD, weight="bold"), text_color=ACCENT).pack()
+            if "session" in self.uptime_box_labels:
+                self.uptime_box_labels["session"].configure(text="1")
+            if "commands" in self.uptime_box_labels:
+                self.uptime_box_labels["commands"].configure(text="0")
         except Exception:
             pass
 
@@ -702,12 +752,17 @@ class MainWindow:
         hdr.grid(row=0, column=0, padx=12, pady=(12, 6), sticky="ew")
         ctk.CTkLabel(hdr, text=self._tr("conversation"), font=ctk.CTkFont(size=FONT_MD, weight="bold"),
             text_color=TEXT_BRIGHT).pack(side="left")
-        ctk.CTkLabel(hdr, text="🗑  ⬇", font=ctk.CTkFont(size=FONT_SM), text_color=TEXT_DIM).pack(side="right")
+        clear_btn = ctk.CTkButton(hdr, text="🗑",
+            command=self._clear_memory,
+            fg_color="transparent", hover_color="#331122", text_color=TEXT_DIM,
+            width=28, height=28, corner_radius=4, font=ctk.CTkFont(size=FONT_SM))
+        clear_btn.pack(side="right", padx=(4, 0))
+        ctk.CTkLabel(hdr, text="⬇", font=ctk.CTkFont(size=FONT_SM), text_color=TEXT_DIM).pack(side="right")
 
         self.chat_area = ctk.CTkFrame(p, fg_color="#060a14", corner_radius=8)
         self.chat_area.grid(row=2, column=0, padx=12, pady=4, sticky="nsew")
         self.chat_area.grid_columnconfigure(0, weight=1)
-        self.chat_area.grid_rowconfigure(1, weight=1)
+        self.chat_area.grid_rowconfigure(0, weight=1)
 
         self.chat_canvas = Canvas(self.chat_area, bg="#060a14", highlightthickness=0, borderwidth=0)
         self.chat_canvas.grid(row=0, column=0, sticky="nsew")
@@ -771,12 +826,40 @@ class MainWindow:
         self._add_chat_message("user", msg)
         self.chat_entry.delete(0, "end")
         self.chat_time_lbl.configure(text=datetime.now().strftime("%I:%M %p").lstrip('0'))
+        self._ask_ollama(msg)
 
-        def respond():
-            self.window.after(500, lambda: self._add_chat_message("assistant",
-                self._tr("welcome_msg").split("\n")[0] + "\n\n" +
-                ("Mensaje recibido: " if self.lang_code == "es" else "Message received: ") + f'"{msg}"'))
-        threading.Thread(target=respond, daemon=True).start()
+    def _ask_ollama(self, msg):
+        if not self.ollama_verified:
+            txt = ("⚠️ No hay conexión con Ollama. Ve a Configuración → API + Modelo y verifica tu API key."
+                   if self.lang_code == "es"
+                   else "⚠️ No connection to Ollama. Go to Settings → API + Model and verify your API key.")
+            self._add_chat_message("assistant", txt)
+            return
+
+        thinking_frame = ctk.CTkFrame(self.chat_inner, fg_color="#0c1428", corner_radius=8)
+        thinking_frame.pack(fill="x", padx=6, pady=4)
+        ctk.CTkLabel(thinking_frame, text="⏳ ...", font=ctk.CTkFont(size=FONT_SM),
+            text_color=TEXT_DIM, justify="left", wraplength=260).pack(padx=10, pady=8, anchor="w")
+        self.chat_canvas.yview_moveto(1.0)
+
+        def work():
+            model = os.getenv("OLLAMA_MODEL", "llama3")
+            temp = float(os.getenv("OLLAMA_TEMPERATURE", "0.7"))
+            full = self.messages + [{"role": "user", "content": msg}]
+            ok, result = self.ollama.chat(model, full, temperature=temp)
+            self.window.after(0, lambda: self._handle_chat_response(thinking_frame, ok, result, msg))
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _handle_chat_response(self, thinking_frame, ok, result, user_msg):
+        thinking_frame.destroy()
+        if ok:
+            self.messages.append({"role": "user", "content": user_msg})
+            self.messages.append({"role": "assistant", "content": result})
+            self._add_chat_message("assistant", result)
+            self._save_memory()
+        else:
+            self._add_chat_message("assistant", "❌ " + result)
 
     # ─── CONFIG OVERLAY ──────────────────────────
     def _make_overlay(self):
@@ -895,29 +978,53 @@ class MainWindow:
             self.api_key_entry.insert(0, saved_key)
         ctk.CTkLabel(t_api, text=self._tr("api_key_hint"),
             font=ctk.CTkFont(size=FONT_XS), text_color=TEXT_DIM
-        ).grid(row=2, column=0, padx=20, pady=(0, 15), sticky="w")
+        ).grid(row=2, column=0, padx=20, pady=(0, 8), sticky="w")
+
+        # verify button + status
+        verify_f = ctk.CTkFrame(t_api, fg_color="transparent")
+        verify_f.grid(row=3, column=0, padx=20, pady=4, sticky="w")
+        ctk.CTkButton(verify_f, text="🔍 " + ("Verificar API y cargar modelos" if self.lang_code == "es"
+            else "Verify API & load models"),
+            command=self._verify_ollama,
+            fg_color="#004466", hover_color="#006688", corner_radius=8, height=34,
+            font=ctk.CTkFont(size=FONT_SM)
+        ).pack(side="left")
+        self.api_status_lbl = ctk.CTkLabel(verify_f, text="", font=ctk.CTkFont(size=FONT_XS), text_color=TEXT_DIM)
+        self.api_status_lbl.pack(side="left", padx=(12, 0))
 
         sep = ctk.CTkFrame(t_api, height=1, fg_color="#1a2a44")
-        sep.grid(row=3, column=0, padx=20, sticky="ew", pady=5)
+        sep.grid(row=4, column=0, padx=20, sticky="ew", pady=8)
 
         ctk.CTkLabel(t_api, text=self._tr("model_label"),
             font=ctk.CTkFont(size=FONT_MD, weight="bold"), text_color=TEXT_BRIGHT
-        ).grid(row=4, column=0, padx=20, pady=(15, 8), sticky="w")
+        ).grid(row=5, column=0, padx=20, pady=(10, 8), sticky="w")
         self.model_var = ctk.StringVar(value=os.getenv("OLLAMA_MODEL", "llama3"))
         self.model_menu = ctk.CTkOptionMenu(t_api,
-            values=["llama3", "mistral", "codellama", "gemma", "phi", "deepseek-coder"],
+            values=["llama3"],
             variable=self.model_var, fg_color="#0a1a33", button_color="#004466",
-            font=ctk.CTkFont(size=FONT_SM), dropdown_font=ctk.CTkFont(size=FONT_SM), width=220)
-        self.model_menu.grid(row=5, column=0, padx=20, pady=(0, 4), sticky="w")
+            font=ctk.CTkFont(size=FONT_SM), dropdown_font=ctk.CTkFont(size=FONT_SM), width=300)
+        self.model_menu.grid(row=6, column=0, padx=20, pady=(0, 4), sticky="w")
         ctk.CTkLabel(t_api, text=self._tr("model_hint"),
             font=ctk.CTkFont(size=FONT_XS), text_color=TEXT_DIM
-        ).grid(row=6, column=0, padx=20, pady=(0, 15), sticky="w")
+        ).grid(row=7, column=0, padx=20, pady=(0, 6), sticky="w")
+
+        # capabilities display
+        self.model_caps_lbl = ctk.CTkLabel(t_api, text="",
+            font=ctk.CTkFont(size=FONT_XS), text_color=TEXT_DIM)
+        self.model_caps_lbl.grid(row=8, column=0, padx=20, pady=(0, 8), sticky="w")
+        self.model_menu.configure(command=self._on_model_selected)
+
+        # update cap label for initial model
+        self.window.after(200, self._on_model_selected)
+
+        sep2 = ctk.CTkFrame(t_api, height=1, fg_color="#1a2a44")
+        sep2.grid(row=9, column=0, padx=20, sticky="ew", pady=4)
 
         ctk.CTkLabel(t_api, text=self._tr("temp_label"),
             font=ctk.CTkFont(size=FONT_MD, weight="bold"), text_color=TEXT_BRIGHT
-        ).grid(row=7, column=0, padx=20, pady=(10, 8), sticky="w")
+        ).grid(row=10, column=0, padx=20, pady=(10, 8), sticky="w")
         tf = ctk.CTkFrame(t_api, fg_color="transparent")
-        tf.grid(row=8, column=0, padx=20, pady=5, sticky="w")
+        tf.grid(row=11, column=0, padx=20, pady=5, sticky="w")
         self.temp_slider = ctk.CTkSlider(tf, from_=0, to=1, number_of_steps=20,
             width=280, height=18,
             fg_color="#112244", progress_color=ACCENT, button_color="#0088cc",
@@ -930,13 +1037,13 @@ class MainWindow:
         self.temp_slider.configure(command=lambda v: self.temp_label.configure(text=f"{v:.1f}"))
         ctk.CTkLabel(t_api, text=self._tr("temp_hint"),
             font=ctk.CTkFont(size=FONT_XS), text_color=TEXT_DIM
-        ).grid(row=9, column=0, padx=20, pady=(2, 15), sticky="w")
+        ).grid(row=12, column=0, padx=20, pady=(2, 15), sticky="w")
 
         ctk.CTkButton(t_api, text="💾 " + self._tr("save_api_btn"),
             command=lambda: self._save_single("api_model"),
             fg_color="#004466", hover_color="#006688", corner_radius=8, height=34,
             font=ctk.CTkFont(size=FONT_SM)
-        ).grid(row=10, column=0, padx=20, pady=(10, 20), sticky="w")
+        ).grid(row=13, column=0, padx=20, pady=(10, 20), sticky="w")
 
         # ── Tab: General ──
         t_gen = tabview.add("⚙  " + self._tr("tab_general"))
@@ -980,6 +1087,64 @@ class MainWindow:
         self._close_overlay()
         self._rebuild_ui()
         self._fetch_weather()
+
+    # ─── OLLAMA VERIFY ────────────────────────────
+    def _verify_ollama(self):
+        key = self.api_key_entry.get().strip()
+        if not key:
+            messagebox.showwarning("Advertencia" if self.lang_code == "es" else "Warning",
+                self._tr("api_empty_warn"))
+            return
+        self.ollama.set_api_key(key)
+        self.api_status_lbl.configure(text="Verificando..." if self.lang_code == "es" else "Verifying...")
+
+        def work():
+            ok, msg = self.ollama.verify()
+            if ok:
+                models = self.ollama.list_models(force=True) or []
+                self.ollama_models = models
+                self.ollama_verified = True
+                model_ids = [m["id"] for m in models] if models else []
+                self.window.after(0, lambda: self._on_verify_success(msg, model_ids))
+            else:
+                self.window.after(0, lambda: self._on_verify_fail(msg))
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _on_verify_success(self, msg, model_ids):
+        self.api_status_lbl.configure(text="✅ " + msg, text_color="#44cc66")
+        if model_ids:
+            self.model_menu.configure(values=model_ids)
+            if self.model_var.get() not in model_ids:
+                self.model_var.set(model_ids[0])
+            self._on_model_selected()
+        else:
+            self.model_caps_lbl.configure(text="")
+
+    def _on_verify_fail(self, msg):
+        self.api_status_lbl.configure(text="❌ " + msg, text_color="#cc6677")
+        self.ollama_verified = False
+        self.model_caps_lbl.configure(text="")
+
+    def _on_model_selected(self, choice=None):
+        mid = self.model_var.get()
+        if self.ollama_verified and self.ollama_models:
+            info = self.ollama.get_model_info(mid)
+            caps = []
+            if info.get("has_vision"):
+                caps.append("🖼️ " + ("Visión" if self.lang_code == "es" else "Vision"))
+            if info.get("has_audio"):
+                caps.append("🎤 " + ("Audio" if self.lang_code == "es" else "Audio"))
+            if caps:
+                self.model_caps_lbl.configure(
+                    text="Capacidades: " + " | ".join(caps),
+                    text_color="#00ccaa")
+            else:
+                self.model_caps_lbl.configure(
+                    text="📝 " + ("Solo texto" if self.lang_code == "es" else "Text only"),
+                    text_color=TEXT_DIM)
+        else:
+            self.model_caps_lbl.configure(text="")
 
     # ─── WEATHER SEARCH ──────────────────────────
     def _search_cities(self):
@@ -1099,6 +1264,7 @@ class MainWindow:
                     self._tr("api_empty_warn"))
                 return
             set_key(ENV_PATH, "OLLAMA_API_KEY", k)
+            self.ollama.set_api_key(k)
             m = self.model_var.get()
             t = str(self.temp_slider.get())
             set_key(ENV_PATH, "OLLAMA_MODEL", m)

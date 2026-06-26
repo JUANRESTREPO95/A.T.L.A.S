@@ -27,5 +27,8 @@ Thumbs.db
 # Config local
 config.local.ini
 
+# Memoria persistente de ATLAS (conversaciones)
+memoria.json
+
 # Referencias visuales
 IMAGEN REFERENCIA.webp

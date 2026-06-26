@@ -13,10 +13,52 @@ EXCLUDED_APPS = (
     r"explorador|archivos|directorio|carpeta|"
     r"terminal|consola|cmd|bash|"
     r"bloc\s*de\s*notas|notepad|editor|"
-    r"youtube|yt"
+    r"youtube|yt|"
+    r"proyecto|project"
 )
 
 EXCLUDED_APPS_PATTERN = EXCLUDED_APPS.replace(r"\s*", r"[\s_]*")
+
+# ─── Mapa de proyectos locales ────────────────────
+PROJECT_ROOTS = [
+    os.path.expanduser("~/Proyectos"),
+    os.path.expanduser("~/projects"),
+    os.path.expanduser("~/Escritorio"),
+    os.path.expanduser("~/Desktop"),
+    os.path.expanduser("~/Documentos"),
+    os.path.expanduser("~/Documents"),
+]
+
+
+def _build_project_map() -> dict[str, str]:
+    pmap = {}
+    seen = set()
+    for root in PROJECT_ROOTS:
+        if not os.path.isdir(root):
+            continue
+        try:
+            for entry in os.listdir(root):
+                full = os.path.join(root, entry)
+                if not os.path.isdir(full):
+                    continue
+                key = entry.lower().replace(" ", "").replace("-", "").replace("_", "")
+                if key not in seen:
+                    seen.add(key)
+                    pmap[key] = full
+        except PermissionError:
+            continue
+    return pmap
+
+
+PROJECT_MAP = _build_project_map()
+
+# Alias manuales: nombre común → directorio real
+PROJECT_ALIASES = {
+    "atlas": PROJECT_MAP.get("jarvis"),
+    "a.t.l.a.s": PROJECT_MAP.get("jarvis"),
+    "jarvis": PROJECT_MAP.get("jarvis"),
+}
+
 
 COMMANDS = [
     # 1 — YouTube (abre + busca combinado)
@@ -69,7 +111,16 @@ COMMANDS = [
         "fn": "_open_notepad",
         "desc": "abre bloc de notas",
     },
-    # 7 — Cualquier otra app
+    # 7 — Abrir proyecto local
+    {
+        "patterns": [
+            r"(?:abre|abrir|abri|abrí)\s+(?:el\s+)?(?:proyecto|project)\s+(.+?)$",
+            r"(?:abre|abrir|abri|abrí)\s+(.+?)\s+(?:en\s+)?(?:el\s+)?(?:proyecto|project)\s+(.+?)$",
+        ],
+        "fn": "_open_project",
+        "desc": "abre proyecto local",
+    },
+    # 8 — Cualquier otra app
     {
         "patterns": [
             rf"(?:abre|abrir|abri|abrí)\s+(?:(?:el|la|un|una)\s+)?(?!{EXCLUDED_APPS_PATTERN})([\w\s\.áéíóúñüÁÉÍÓÚÑÜ]+?)$",
@@ -223,6 +274,44 @@ def _open_notepad(*args):
 def _open_youtube(*args):
     webbrowser.open("https://www.youtube.com")
     return "Abriendo YouTube..."
+
+
+def _open_project(*args):
+    if not args:
+        return "¿Qué proyecto quieres abrir?"
+
+    # Case: "abre X en el proyecto Y" → args = (X, Y)
+    if len(args) >= 2:
+        sub, project = args[0].strip(), args[-1].strip()
+        base = _find_project(project)
+        if base:
+            sub_path = os.path.join(base, sub)
+            if os.path.exists(sub_path):
+                subprocess.Popen(["xdg-open", sub_path])
+                return f"Abriendo {sub} en {project}..."
+            subprocess.Popen(["xdg-open", base])
+            return f"'{sub}' no existe en {project}. Abriendo el proyecto..."
+        return f"No encontré el proyecto '{project}'."
+
+    # Case: "abre el proyecto X" → args = (X,)
+    name = args[0].strip()
+    path = _find_project(name)
+    if path:
+        subprocess.Popen(["xdg-open", path])
+        return f"Abriendo proyecto '{os.path.basename(path)}'..."
+    return f"No encontré el proyecto '{name}' en el PC."
+
+
+def _find_project(name: str) -> str | None:
+    key = name.lower().replace(" ", "").replace("-", "").replace("_", "")
+    if key in PROJECT_ALIASES and PROJECT_ALIASES[key]:
+        return PROJECT_ALIASES[key]
+    if key in PROJECT_MAP:
+        return PROJECT_MAP[key]
+    for pkey, ppath in PROJECT_MAP.items():
+        if key in pkey or pkey in key:
+            return ppath
+    return None
 
 
 SITE_MAP = {

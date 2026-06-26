@@ -72,7 +72,7 @@ COMMANDS = [
     # 7 — Cualquier otra app
     {
         "patterns": [
-            rf"(?:abre|abrir|abri|abrí)\s+(?:(?:el|la|un|una)\s+)?(?!{EXCLUDED_APPS_PATTERN})([\w\sáéíóúñüÁÉÍÓÚÑÜ]+?)$",
+            rf"(?:abre|abrir|abri|abrí)\s+(?:(?:el|la|un|una)\s+)?(?!{EXCLUDED_APPS_PATTERN})([\w\s\.áéíóúñüÁÉÍÓÚÑÜ]+?)$",
         ],
         "fn": "_open_app",
         "desc": "abre aplicación",
@@ -261,6 +261,7 @@ SITE_MAP = {
     "amazon": "https://amazon.com",
     "ebay": "https://ebay.com",
     "aliexpress": "https://aliexpress.com",
+    "a.t.l.a.s": "https://github.com/JUANRESTREPO95/A.T.L.A.S",
 }
 
 
@@ -317,7 +318,30 @@ def _open_app(*args):
     except subprocess.CalledProcessError:
         pass
 
-    # 4) Fallback: try as a website
+    # 4) Contiene "repositorio/repo" → abrir GitHub
+    if "repositorio" in clean or "repo" in clean:
+        repo_match = re.search(r"(?:repositorio|repo)\s+(.+)?", clean)
+        repo_raw = repo_match.group(1) if repo_match else None
+        if repo_raw:
+            repo_clean = re.sub(r"\b(mi|mio|mia|mis|el|la|de|un|una)\b", "", repo_raw).strip()
+            slug = repo_clean.replace(" ", "").upper()
+            if "." in slug:
+                url = f"https://github.com/JUANRESTREPO95/{slug}"
+            else:
+                url = f"https://github.com/search?q={repo_clean.replace(' ', '+')}&type=repositories"
+        else:
+            url = "https://github.com/JUANRESTREPO95"
+        webbrowser.open(url)
+        return f"Abriendo repositorio en GitHub..."
+
+    # 5) Contiene puntos → abrir como URL
+    if "." in clean:
+        slug = clean.replace(" ", "")
+        url = f"https://{slug}" if not slug.startswith("http") else slug
+        webbrowser.open(url)
+        return f"Abriendo {name}..."
+
+    # 6) Fallback: sitio web genérico
     slug = clean.replace(" ", "")
     url = f"https://{slug}.com" if "." not in slug else f"https://{slug}"
     webbrowser.open(url)

@@ -19,6 +19,7 @@ ejecutar acciones, monitorizar el sistema, y anticiparte a mis necesidades.
 
 ## Capacidades
 - Responder preguntas sobre cualquier tema
+- **Buscar información actualizada en internet** en tiempo real
 - Recordar conversaciones pasadas (memoria persistente)
 - Monitorear recursos del sistema (CPU, RAM, disco)
 - Consultar el clima

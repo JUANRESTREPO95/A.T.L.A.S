@@ -6,6 +6,7 @@ from datetime import datetime
 import psutil
 import requests
 from src.core.ollama_client import OllamaClient
+from src.modules.web_search import search_web, search_instant
 
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("dark-blue")
@@ -838,14 +839,33 @@ class MainWindow:
 
         thinking_frame = ctk.CTkFrame(self.chat_inner, fg_color="#0c1428", corner_radius=8)
         thinking_frame.pack(fill="x", padx=6, pady=4)
-        ctk.CTkLabel(thinking_frame, text="⏳ ...", font=ctk.CTkFont(size=FONT_SM),
-            text_color=TEXT_DIM, justify="left", wraplength=260).pack(padx=10, pady=8, anchor="w")
+        thinking_lbl = ctk.CTkLabel(thinking_frame, text="⏳ ...", font=ctk.CTkFont(size=FONT_SM),
+            text_color=TEXT_DIM, justify="left", wraplength=260)
+        thinking_lbl.pack(padx=10, pady=8, anchor="w")
         self.chat_canvas.yview_moveto(1.0)
+
+        def update_thinking(text):
+            self.window.after(0, lambda: thinking_lbl.configure(text=text))
 
         def work():
             model = os.getenv("OLLAMA_MODEL", "llama3")
             temp = float(os.getenv("OLLAMA_TEMPERATURE", "0.7"))
-            full = self.messages + [{"role": "user", "content": msg}]
+
+            update_thinking("🌐 Buscando en internet...")
+            web_info = search_web(msg)
+
+            user_content = msg
+            if web_info:
+                user_content = (
+                    f"{msg}\n\n"
+                    f"--- Información actual de internet ---\n"
+                    f"{web_info}\n"
+                    f"--- Fin de información ---\n\n"
+                    f"Usa la información anterior si es relevante para responder."
+                )
+
+            update_thinking("⏳ Pensando...")
+            full = self.messages + [{"role": "user", "content": user_content}]
             ok, result = self.ollama.chat(model, full, temperature=temp)
             self.window.after(0, lambda: self._handle_chat_response(thinking_frame, ok, result, msg))
 

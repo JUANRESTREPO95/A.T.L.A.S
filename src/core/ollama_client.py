@@ -3,7 +3,7 @@ import requests
 OLLAMA_CLOUD_URL = "https://ollama.com"
 
 VISION_KEYWORDS = ["llava", "cogvlm", "minicpm", "moondream", "fuyu", "vision",
-                   "nanollava", "phi3", "pixtral", "vl", "multimodal", "gemma"]
+                   "nanollava", "phi3", "pixtral", "vl", "multimodal"]
 AUDIO_KEYWORDS = ["whisper"]
 
 

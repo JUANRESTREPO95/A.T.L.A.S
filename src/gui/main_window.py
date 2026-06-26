@@ -5,10 +5,8 @@ from dotenv import load_dotenv, set_key
 from datetime import datetime
 import psutil
 import requests
-from PIL import Image
 from src.core.ollama_client import OllamaClient
 from src.modules.web_search import search_web
-from src.modules.screen_capture import capture_primary_monitor, capture_all_as_one, image_to_base64
 
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("dark-blue")
@@ -620,39 +618,24 @@ class MainWindow:
             self.weather_wind_lbl.configure(text=self._tr("wind") + ": --")
             self.weather_feel_lbl.configure(text=self._tr("feels") + ": --")
 
-    # Panel Screen Capture
+    # Panel Camera
     def _create_panel_camera(self, parent, row):
         p = glass_frame(parent)
         p.grid(row=row, column=0, sticky="nsew", padx=2, pady=2)
         p.grid_columnconfigure(0, weight=1)
-        p.grid_rowconfigure(1, weight=1)
 
         hdr = ctk.CTkFrame(p, fg_color="transparent")
         hdr.grid(row=0, column=0, padx=12, pady=(8, 0), sticky="ew")
-        ctk.CTkLabel(hdr, text="🖥 Pantalla", font=ctk.CTkFont(size=FONT_MD, weight="bold"),
+        ctk.CTkLabel(hdr, text=self._tr("camera"), font=ctk.CTkFont(size=FONT_MD, weight="bold"),
             text_color=TEXT_BRIGHT).pack(side="left")
+        ctk.CTkLabel(hdr, text="📷  🖼  ⏻", font=ctk.CTkFont(size=FONT_SM), text_color=TEXT_DIM).pack(side="right")
 
-        btn_f = ctk.CTkFrame(hdr, fg_color="transparent")
-        btn_f.pack(side="right")
-        ctk.CTkButton(btn_f, text="📷",
-            command=self._capture_and_show,
-            fg_color="#004466", hover_color="#006688", width=30, height=24,
-            corner_radius=4, font=ctk.CTkFont(size=12)
-        ).pack(side="left", padx=1)
-        ctk.CTkButton(btn_f, text="👁",
-            command=self._describe_screen,
-            fg_color="#004466", hover_color="#006688", width=30, height=24,
-            corner_radius=4, font=ctk.CTkFont(size=12)
-        ).pack(side="left", padx=1)
-
-        self.screen_preview = ctk.CTkLabel(p, text="🖥", font=ctk.CTkFont(size=48),
-            text_color="#334455")
-        self.screen_preview.grid(row=1, column=0, padx=8, pady=6, sticky="nsew")
-
-        self.screen_status = ctk.CTkLabel(p, text="Presiona 📷 para capturar",
-            font=ctk.CTkFont(size=FONT_XS), text_color=TEXT_DIM)
-        self.screen_status.grid(row=2, column=0, padx=12, pady=(0, 8), sticky="w")
-        self._last_screenshot = None
+        cam_box = ctk.CTkFrame(p, fg_color="#040810", corner_radius=8, height=60)
+        cam_box.grid(row=1, column=0, padx=12, pady=(10, 0), sticky="ew")
+        cam_box.grid_propagate(False)
+        ctk.CTkLabel(cam_box, text="📷", font=ctk.CTkFont(size=24), text_color="#334455").pack(expand=True)
+        ctk.CTkLabel(p, text=self._tr("camera_inactive"),
+            font=ctk.CTkFont(size=FONT_XS), text_color=TEXT_DIM).grid(row=2, column=0, padx=12, pady=(6, 10))
 
     # Panel System Uptime
     def _create_panel_uptime(self, parent, row):
@@ -901,67 +884,6 @@ class MainWindow:
             self._save_memory()
         else:
             self._add_chat_message("assistant", "❌ " + result)
-
-    # ─── SCREEN CAPTURE ──────────────────────────
-    def _capture_and_show(self):
-        def work():
-            try:
-                img = capture_all_as_one()
-                max_w = 250
-                if img.width > max_w:
-                    ratio = max_w / img.width
-                    new_h = int(img.height * ratio)
-                    img = img.resize((max_w, new_h), Image.LANCZOS)
-                ctk_img = ctk.CTkImage(light_image=img, dark_image=img, size=(img.width, img.height))
-                self._last_screenshot = img
-                self.window.after(0, lambda: self._show_screenshot(ctk_img))
-            except Exception as e:
-                self.window.after(0, lambda: self.screen_status.configure(text=f"Error: {e}"))
-
-        threading.Thread(target=work, daemon=True).start()
-
-    def _show_screenshot(self, ctk_img):
-        self.screen_preview.configure(image=ctk_img, text="")
-        self.screen_status.configure(text="✅ Capturada. 👁 para describir")
-
-    def _describe_screen(self):
-        if self._last_screenshot is None:
-            self._capture_and_show()
-            self.window.after(500, self._describe_screen)
-            return
-
-        if not self.ollama_verified:
-            txt = "⚠️ No hay conexión con Ollama para describir la pantalla."
-            self._add_chat_message("assistant", txt)
-            return
-
-        msg = "Describe lo que ves en mi pantalla. Responde en español."
-        self._add_chat_message("user", "🖼 Describe mi pantalla")
-        thinking_frame = ctk.CTkFrame(self.chat_inner, fg_color="#0c1428", corner_radius=8)
-        thinking_frame.pack(fill="x", padx=6, pady=4)
-        ctk.CTkLabel(thinking_frame, text="👁 Analizando pantalla...", font=ctk.CTkFont(size=FONT_SM),
-            text_color=TEXT_DIM, justify="left", wraplength=260).pack(padx=10, pady=8, anchor="w")
-        self.chat_canvas.yview_moveto(1.0)
-
-        def work():
-            try:
-                b64 = image_to_base64(self._last_screenshot)
-                image_url = f"data:image/png;base64,{b64}"
-                content = [
-                    {"type": "text", "text": msg},
-                    {"type": "image_url", "image_url": {"url": image_url}},
-                ]
-                full = list(self.messages)
-                full.append({"role": "user", "content": content})
-                model = os.getenv("OLLAMA_MODEL", "gemma4:31b")
-                temp = float(os.getenv("OLLAMA_TEMPERATURE", "0.7"))
-                ok, result = self.ollama.chat(model, full, temperature=temp)
-                self.window.after(0, lambda: self._handle_chat_response(thinking_frame, ok, result, msg))
-            except Exception as e:
-                self.window.after(0, lambda: thinking_frame.destroy())
-                self.window.after(0, lambda: self._add_chat_message("assistant", f"❌ Error: {e}"))
-
-        threading.Thread(target=work, daemon=True).start()
 
     # ─── CONFIG OVERLAY ──────────────────────────
     def _make_overlay(self):

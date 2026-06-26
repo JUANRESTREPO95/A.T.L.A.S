@@ -225,18 +225,56 @@ def _open_youtube(*args):
     return "Abriendo YouTube..."
 
 
+SITE_MAP = {
+    "github": "https://github.com",
+    "facebook": "https://facebook.com",
+    "fb": "https://facebook.com",
+    "twitter": "https://x.com",
+    "x": "https://x.com",
+    "instagram": "https://instagram.com",
+    "ig": "https://instagram.com",
+    "linkedin": "https://linkedin.com",
+    "gmail": "https://mail.google.com",
+    "mail": "https://mail.google.com",
+    "drive": "https://drive.google.com",
+    "google drive": "https://drive.google.com",
+    "docs": "https://docs.google.com",
+    "google docs": "https://docs.google.com",
+    "sheets": "https://sheets.google.com",
+    "calendar": "https://calendar.google.com",
+    "maps": "https://maps.google.com",
+    "google maps": "https://maps.google.com",
+    "youtube": "https://youtube.com",
+    "yt": "https://youtube.com",
+    "netflix": "https://netflix.com",
+    "spotify": "https://open.spotify.com",
+    "whatsapp": "https://web.whatsapp.com",
+    "wa": "https://web.whatsapp.com",
+    "chatgpt": "https://chatgpt.com",
+    "gpt": "https://chatgpt.com",
+    "claude": "https://claude.ai",
+    "stackoverflow": "https://stackoverflow.com",
+    "so": "https://stackoverflow.com",
+    "reddit": "https://reddit.com",
+    "wikipedia": "https://wikipedia.org",
+    "wiki": "https://wikipedia.org",
+    "amazon": "https://amazon.com",
+    "ebay": "https://ebay.com",
+    "aliexpress": "https://aliexpress.com",
+}
+
+
 def _open_app(*args):
     name = args[0].strip() if args else ""
     if not name:
         return "¿Qué app quieres abrir?"
-    clean = name.lower().replace("á", "a").replace("é", "e").replace("í", "i").replace("ó", "o").replace("ú", "u")
+    clean = name.lower().strip().replace("á", "a").replace("é", "e").replace("í", "i").replace("ó", "o").replace("ú", "u")
     app_map = {
         "calculadora": "gnome-calculator",
         "calculos": "gnome-calculator",
         "calc": "gnome-calculator",
         "calendario": "gnome-calendar",
         "calend": "gnome-calendar",
-        "musica": "rhythmbox",
         "musica": "spotify",
         "spotify": "spotify",
         "vscode": "code",
@@ -256,16 +294,34 @@ def _open_app(*args):
         "configuraciones": "gnome-control-center",
         "ajustes": "gnome-control-center",
     }
-    app_cmd = app_map.get(clean, clean)
-    try:
-        subprocess.Popen([app_cmd])
-        return f"Abriendo {name.capitalize()}..."
-    except:
+
+    # 1) Try app_map first
+    app_cmd = app_map.get(clean)
+    if app_cmd:
         try:
-            subprocess.Popen(["xdg-open", app_cmd])
+            subprocess.Popen([app_cmd])
             return f"Abriendo {name.capitalize()}..."
-        except:
-            return f"No pude abrir {name}. Instálalo o revisa el nombre."
+        except OSError:
+            pass
+
+    # 2) Check if it's a known website
+    if clean in SITE_MAP:
+        webbrowser.open(SITE_MAP[clean])
+        return f"Abriendo {name.capitalize()} en el navegador..."
+
+    # 3) Try as a system binary
+    try:
+        subprocess.run(["which", clean], capture_output=True, check=True)
+        subprocess.Popen([clean])
+        return f"Abriendo {name.capitalize()}..."
+    except subprocess.CalledProcessError:
+        pass
+
+    # 4) Fallback: try as a website
+    slug = clean.replace(" ", "")
+    url = f"https://{slug}.com" if "." not in slug else f"https://{slug}"
+    webbrowser.open(url)
+    return f"No encontré {name.capitalize()} como app. Lo abrí como página web."
 
 
 def _search_google(*args):

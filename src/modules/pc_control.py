@@ -339,9 +339,8 @@ def _press_keys(*args):
     if len(keys) > 1:
         for danger in dangerous:
             if all(dk in keys for dk in danger):
-                warn = _warn_if_atlas("cerrar ATLAS con teclas")
-                if warn:
-                    return warn
+                if _is_atlas_window(_get_active_window_name()):
+                    return "⚠️ No voy a presionar eso mientras ATLAS esté activo."
 
     if len(keys) == 1:
         pyautogui.press(keys[0])
@@ -350,50 +349,60 @@ def _press_keys(*args):
     return f"Presionando: {'+'.join(keys)}"
 
 
-def _is_atlas_active():
+def _is_atlas_window(window_name: str) -> bool:
+    return "atlas" in window_name.lower()
+
+
+def _get_active_window_name():
     try:
-        import subprocess
-        result = subprocess.run(
+        r = subprocess.run(
             ["xdotool", "getactivewindow", "getwindowname"],
             capture_output=True, text=True, timeout=2
         )
-        window_title = result.stdout.strip().lower()
-        return "atlas" in window_title
+        return r.stdout.strip()
     except Exception:
-        return False
-
-
-def _warn_if_atlas(action_desc: str) -> str | None:
-    if _is_atlas_active():
-        return f"⚠️ No puedo {action_desc} porque ATLAS está en primer plano. Pon otra ventana al frente primero."
-    return None
+        return ""
 
 
 def _close_window(*args):
     raw = " ".join(args).lower() if args else ""
     is_close_all = "todo" in raw or "todas" in raw or "todos" in raw
-    if is_close_all:
-        warn = _warn_if_atlas("cerrar todo")
-        if warn:
-            return warn
-        for _ in range(10):
-            if _is_atlas_active():
-                break
-            pyautogui.hotkey("alt", "f4")
-            time.sleep(0.15)
-        return "Cerrando ventanas (excepto ATLAS)..."
 
-    warn = _warn_if_atlas("cerrar esta ventana")
-    if warn:
-        return warn
+    if is_close_all:
+        closed = 0
+        try:
+            r = subprocess.run(
+                ["xdotool", "search", "--onlyvisible", "--name", "."],
+                capture_output=True, text=True, timeout=3
+            )
+            for wid in r.stdout.strip().split():
+                if not wid:
+                    continue
+                name_r = subprocess.run(
+                    ["xdotool", "getwindowname", wid],
+                    capture_output=True, text=True, timeout=2
+                )
+                wname = name_r.stdout.strip()
+                if _is_atlas_window(wname):
+                    continue
+                subprocess.run(["xdotool", "windowkill", wid],
+                               capture_output=True, timeout=2)
+                closed += 1
+                time.sleep(0.05)
+        except Exception:
+            return "No pude cerrar ventanas."
+        return f"Cerradas {closed} ventana(s). ATLAS intacto."
+
+    active_name = _get_active_window_name()
+    if _is_atlas_window(active_name):
+        return "⚠️ No voy a cerrar ATLAS. Pon otra ventana al frente primero."
     pyautogui.hotkey("alt", "f4")
     return "Cerrando ventana..."
 
 
 def _minimize_window(*args):
-    warn = _warn_if_atlas("minimizar ATLAS")
-    if warn:
-        return warn
+    if _is_atlas_window(_get_active_window_name()):
+        return "⚠️ No voy a minimizar ATLAS."
     pyautogui.hotkey("win", "d")
     return "Minimizando todas las ventanas..."
 

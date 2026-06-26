@@ -854,8 +854,8 @@ class MainWindow:
             temp = float(os.getenv("OLLAMA_TEMPERATURE", "0.7"))
 
             update_thinking("🌐 Buscando en internet...")
-            brave_key = os.getenv("BRAVE_API_KEY", "")
-            web_info = search_web(msg, brave_api_key=brave_key or None)
+            tavily_key = os.getenv("TAVILY_API_KEY", "")
+            web_info = search_web(msg, tavily_api_key=tavily_key or None)
 
             update_thinking("⏳ Pensando...")
             full = list(self.messages)
@@ -1015,29 +1015,31 @@ class MainWindow:
         self.api_status_lbl = ctk.CTkLabel(verify_f, text="", font=ctk.CTkFont(size=FONT_XS), text_color=TEXT_DIM)
         self.api_status_lbl.pack(side="left", padx=(12, 0))
 
-        # Brave Search API
-        brave_row = 4
-        ctk.CTkLabel(t_api, text="Brave Search API Key (opcional):",
+        # Tavily Search API
+        tavily_row = 4
+        ctk.CTkLabel(t_api, text="Tavily API Key (recomendada):",
             font=ctk.CTkFont(size=FONT_MD, weight="bold"), text_color=TEXT_BRIGHT
-        ).grid(row=brave_row, column=0, padx=20, pady=(10, 8), sticky="w")
-        self.brave_key_entry = ctk.CTkEntry(t_api, width=480, show="*", height=36,
+        ).grid(row=tavily_row, column=0, padx=20, pady=(10, 8), sticky="w")
+        self.tavily_key_entry = ctk.CTkEntry(t_api, width=480, show="*", height=36,
             font=ctk.CTkFont(size=FONT_SM), fg_color="#0a1220", border_color="#1a2a44")
-        self.brave_key_entry.grid(row=brave_row + 1, column=0, padx=20, pady=(0, 4), sticky="w")
-        saved_brave = os.getenv("BRAVE_API_KEY", "")
-        if saved_brave:
-            self.brave_key_entry.insert(0, saved_brave)
-        ctk.CTkLabel(t_api, text=("API key de Brave Search (api.search.brave.com). "
-                                  "Mejora la búsqueda en internet. Deja vacío para usar DuckDuckGo."
+        self.tavily_key_entry.grid(row=tavily_row + 1, column=0, padx=20, pady=(0, 4), sticky="w")
+        saved_tavily = os.getenv("TAVILY_API_KEY", "")
+        if saved_tavily:
+            self.tavily_key_entry.insert(0, saved_tavily)
+        ctk.CTkLabel(t_api, text=("API key de Tavily (tavily.com). "
+                                  "Busca en internet y extrae el contenido completo de las páginas. "
+                                  "Deja vacío para usar DuckDuckGo."
                                   if self.lang_code == "es"
-                                  else "Brave Search API key (api.search.brave.com). "
-                                  "Improves web search. Leave empty for DuckDuckGo."),
+                                  else "Tavily API key (tavily.com). "
+                                  "Searches the web and extracts full page content. "
+                                  "Leave empty for DuckDuckGo."),
             font=ctk.CTkFont(size=FONT_XS), text_color=TEXT_DIM
-        ).grid(row=brave_row + 2, column=0, padx=20, pady=(0, 8), sticky="w")
+        ).grid(row=tavily_row + 2, column=0, padx=20, pady=(0, 8), sticky="w")
 
         sep = ctk.CTkFrame(t_api, height=1, fg_color="#1a2a44")
-        sep.grid(row=brave_row + 3, column=0, padx=20, sticky="ew", pady=8)
+        sep.grid(row=tavily_row + 3, column=0, padx=20, sticky="ew", pady=8)
 
-        br = brave_row + 4
+        br = tavily_row + 4
         ctk.CTkLabel(t_api, text=self._tr("model_label"),
             font=ctk.CTkFont(size=FONT_MD, weight="bold"), text_color=TEXT_BRIGHT
         ).grid(row=br, column=0, padx=20, pady=(10, 8), sticky="w")
@@ -1305,8 +1307,8 @@ class MainWindow:
                 return
             set_key(ENV_PATH, "OLLAMA_API_KEY", k)
             self.ollama.set_api_key(k)
-            bk = self.brave_key_entry.get()
-            set_key(ENV_PATH, "BRAVE_API_KEY", bk)
+            tk = self.tavily_key_entry.get()
+            set_key(ENV_PATH, "TAVILY_API_KEY", tk)
             m = self.model_var.get()
             t = str(self.temp_slider.get())
             set_key(ENV_PATH, "OLLAMA_MODEL", m)
@@ -1321,8 +1323,8 @@ class MainWindow:
         k = self.api_key_entry.get()
         if k:
             set_key(ENV_PATH, "OLLAMA_API_KEY", k)
-        bk = self.brave_key_entry.get()
-        set_key(ENV_PATH, "BRAVE_API_KEY", bk)
+        tk = self.tavily_key_entry.get()
+        set_key(ENV_PATH, "TAVILY_API_KEY", tk)
         set_key(ENV_PATH, "OLLAMA_MODEL", self.model_var.get())
         set_key(ENV_PATH, "OLLAMA_TEMPERATURE", str(self.temp_slider.get()))
         messagebox.showinfo(self._tr("config_title"), self._tr("all_saved"))

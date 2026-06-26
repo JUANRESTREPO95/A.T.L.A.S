@@ -1,27 +1,29 @@
-import requests
 from ddgs import DDGS
+from tavily import TavilyClient
 
-BRAVE_URL = "https://api.search.brave.com/res/v1/web/search"
 
-
-def brave_search(query, api_key, max_results=5):
+def tavily_search(query, api_key):
     try:
-        resp = requests.get(BRAVE_URL, headers={
-            "Accept": "application/json",
-            "Accept-Encoding": "gzip",
-            "X-Subscription-Token": api_key,
-        }, params={"q": query, "count": max_results}, timeout=10)
-        if resp.status_code != 200:
+        client = TavilyClient(api_key=api_key)
+        resp = client.search(query, search_depth="advanced", max_results=5)
+        results = resp.get("results", [])
+        if not results:
             return None
-        data = resp.json()
-        results = []
-        for item in (data.get("web", {}) or {}).get("results", []):
-            title = (item.get("title") or "").strip()
-            desc = (item.get("description") or "").strip()
-            url = (item.get("url") or "").strip()
-            if title:
-                results.append({"title": title, "body": desc, "url": url})
-        return _fmt(results) if results else None
+        lines = []
+        for r in results:
+            title = (r.get("title") or "").strip()
+            content = (r.get("content") or "").strip()
+            url = (r.get("url") or "").strip()
+            if not title:
+                continue
+            lines.append(f"• {title}")
+            if content:
+                lines.append(f"  {content[:600]}")
+            if url:
+                lines.append(f"  Fuente: {url}")
+            lines.append("")
+        text = "\n".join(lines).strip()
+        return text if text else None
     except Exception:
         return None
 
@@ -46,9 +48,9 @@ def _gen_queries(query):
     return base
 
 
-def search_web(query, brave_api_key=None, max_results=5):
-    if brave_api_key:
-        r = brave_search(query, brave_api_key, max_results)
+def search_web(query, tavily_api_key=None, max_results=5):
+    if tavily_api_key:
+        r = tavily_search(query, tavily_api_key)
         if r:
             return r
 

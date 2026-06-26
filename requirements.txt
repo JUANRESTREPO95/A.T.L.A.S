@@ -9,6 +9,7 @@ cffi==2.0.0
 charset-normalizer==3.4.7
 customtkinter==6.0.0
 ddgs==9.14.4
+tavily==1.1.0
 darkdetect==0.8.0
 distro==1.9.0
 edge-tts==7.2.8

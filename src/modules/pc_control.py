@@ -433,13 +433,26 @@ def _is_atlas_window(window_name: str) -> bool:
     return "atlas" in window_name.lower()
 
 
+WMCTRL = subprocess.run(["which", "wmctrl"], capture_output=True).returncode == 0
+
+
 def _get_active_window_name():
     try:
         r = subprocess.run(
-            ["xdotool", "getactivewindow", "getwindowname"],
+            ["xprop", "-root", "_NET_ACTIVE_WINDOW"],
             capture_output=True, text=True, timeout=2
         )
-        return r.stdout.strip()
+        m = re.search(r"window id # (0x[0-9a-f]+)", r.stdout)
+        if m:
+            wid = m.group(1)
+            r2 = subprocess.run(
+                ["xprop", "-id", wid, "WM_NAME"],
+                capture_output=True, text=True, timeout=2
+            )
+            m2 = re.search(r'WM_NAME\([^)]+\)\s*=\s*"(.+)"', r2.stdout)
+            if m2:
+                return m2.group(1)
+        return ""
     except Exception:
         return ""
 
@@ -448,27 +461,24 @@ def _close_window(*args):
     raw = " ".join(args).lower() if args else ""
     is_close_all = "todo" in raw or "todas" in raw or "todos" in raw
 
-    if is_close_all:
+    if is_close_all and WMCTRL:
         closed = 0
         try:
             r = subprocess.run(
-                ["xdotool", "search", "--onlyvisible", "--name", "."],
+                ["wmctrl", "-l"],
                 capture_output=True, text=True, timeout=3
             )
-            for wid in r.stdout.strip().split():
-                if not wid:
+            for line in r.stdout.strip().split("\n"):
+                parts = line.split(None, 3)
+                if len(parts) < 4:
                     continue
-                name_r = subprocess.run(
-                    ["xdotool", "getwindowname", wid],
-                    capture_output=True, text=True, timeout=2
-                )
-                wname = name_r.stdout.strip()
-                if _is_atlas_window(wname):
+                wid, _, _, title = parts
+                if _is_atlas_window(title):
                     continue
-                subprocess.run(["xdotool", "windowkill", wid],
+                subprocess.run(["wmctrl", "-ic", wid],
                                capture_output=True, timeout=2)
                 closed += 1
-                time.sleep(0.05)
+                time.sleep(0.08)
         except Exception:
             return "No pude cerrar ventanas."
         return f"Cerradas {closed} ventana(s). ATLAS intacto."

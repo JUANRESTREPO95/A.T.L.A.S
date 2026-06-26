@@ -115,6 +115,7 @@ COMMANDS = [
     {
         "patterns": [
             r"(?:abre|abrir|abri|abrí)\s+(?:el\s+)?(?:proyecto|project)\s+(.+?)$",
+            r"(?:abre|abrir|abri|abrí)\s+(?:el\s+)?(?:proyecto|project)\s*$",
             r"(?:abre|abrir|abri|abrí)\s+(.+?)\s+(?:en\s+)?(?:el\s+)?(?:proyecto|project)\s+(.+?)$",
         ],
         "fn": "_open_project",
@@ -170,6 +171,15 @@ COMMANDS = [
         ],
         "fn": "_close_window",
         "desc": "cierra ventana",
+    },
+    # 13 — Listar proyectos
+    {
+        "patterns": [
+            r"(?:lista|listar|listá|muestra|mostrar|enseña|enseñar|qu[eé])\s+(?:(?:mis|los|las)\s+)?(?:proyectos|projectos)",
+            r"(?:qu[eé])\s+(?:proyectos|projectos)\s+(?:tengo|hay|existen)",
+        ],
+        "fn": "_list_projects",
+        "desc": "lista proyectos locales",
     },
     {
         "patterns": [
@@ -276,8 +286,22 @@ def _open_youtube(*args):
     return "Abriendo YouTube..."
 
 
+def _list_projects(*args):
+    if not PROJECT_MAP:
+        return "No encontré proyectos en las carpetas habituales."
+    lines = ["**Proyectos locales encontrados:**"]
+    for key, path in sorted(PROJECT_MAP.items(), key=lambda x: x[0]):
+        name = os.path.basename(path)
+        lines.append(f"  • {name}  —  {path}")
+    return "\n".join(lines)
+
+
 def _open_project(*args):
-    if not args:
+    if not args or (len(args) == 1 and not args[0].strip()):
+        root = os.path.expanduser("~/Proyectos")
+        if os.path.isdir(root):
+            subprocess.Popen(["xdg-open", root])
+            return "Abriendo carpeta de proyectos..."
         return "¿Qué proyecto quieres abrir?"
 
     # Case: "abre X en el proyecto Y" → args = (X, Y)

@@ -854,7 +854,8 @@ class MainWindow:
             temp = float(os.getenv("OLLAMA_TEMPERATURE", "0.7"))
 
             update_thinking("🌐 Buscando en internet...")
-            web_info = search_web(msg)
+            brave_key = os.getenv("BRAVE_API_KEY", "")
+            web_info = search_web(msg, brave_api_key=brave_key or None)
 
             update_thinking("⏳ Pensando...")
             full = list(self.messages)
@@ -1014,39 +1015,56 @@ class MainWindow:
         self.api_status_lbl = ctk.CTkLabel(verify_f, text="", font=ctk.CTkFont(size=FONT_XS), text_color=TEXT_DIM)
         self.api_status_lbl.pack(side="left", padx=(12, 0))
 
-        sep = ctk.CTkFrame(t_api, height=1, fg_color="#1a2a44")
-        sep.grid(row=4, column=0, padx=20, sticky="ew", pady=8)
+        # Brave Search API
+        brave_row = 4
+        ctk.CTkLabel(t_api, text="Brave Search API Key (opcional):",
+            font=ctk.CTkFont(size=FONT_MD, weight="bold"), text_color=TEXT_BRIGHT
+        ).grid(row=brave_row, column=0, padx=20, pady=(10, 8), sticky="w")
+        self.brave_key_entry = ctk.CTkEntry(t_api, width=480, show="*", height=36,
+            font=ctk.CTkFont(size=FONT_SM), fg_color="#0a1220", border_color="#1a2a44")
+        self.brave_key_entry.grid(row=brave_row + 1, column=0, padx=20, pady=(0, 4), sticky="w")
+        saved_brave = os.getenv("BRAVE_API_KEY", "")
+        if saved_brave:
+            self.brave_key_entry.insert(0, saved_brave)
+        ctk.CTkLabel(t_api, text=("API key de Brave Search (api.search.brave.com). "
+                                  "Mejora la búsqueda en internet. Deja vacío para usar DuckDuckGo."
+                                  if self.lang_code == "es"
+                                  else "Brave Search API key (api.search.brave.com). "
+                                  "Improves web search. Leave empty for DuckDuckGo."),
+            font=ctk.CTkFont(size=FONT_XS), text_color=TEXT_DIM
+        ).grid(row=brave_row + 2, column=0, padx=20, pady=(0, 8), sticky="w")
 
+        sep = ctk.CTkFrame(t_api, height=1, fg_color="#1a2a44")
+        sep.grid(row=brave_row + 3, column=0, padx=20, sticky="ew", pady=8)
+
+        br = brave_row + 4
         ctk.CTkLabel(t_api, text=self._tr("model_label"),
             font=ctk.CTkFont(size=FONT_MD, weight="bold"), text_color=TEXT_BRIGHT
-        ).grid(row=5, column=0, padx=20, pady=(10, 8), sticky="w")
+        ).grid(row=br, column=0, padx=20, pady=(10, 8), sticky="w")
         self.model_var = ctk.StringVar(value=os.getenv("OLLAMA_MODEL", "llama3"))
         self.model_menu = ctk.CTkOptionMenu(t_api,
             values=["llama3"],
             variable=self.model_var, fg_color="#0a1a33", button_color="#004466",
             font=ctk.CTkFont(size=FONT_SM), dropdown_font=ctk.CTkFont(size=FONT_SM), width=300)
-        self.model_menu.grid(row=6, column=0, padx=20, pady=(0, 4), sticky="w")
+        self.model_menu.grid(row=br + 1, column=0, padx=20, pady=(0, 4), sticky="w")
         ctk.CTkLabel(t_api, text=self._tr("model_hint"),
             font=ctk.CTkFont(size=FONT_XS), text_color=TEXT_DIM
-        ).grid(row=7, column=0, padx=20, pady=(0, 6), sticky="w")
+        ).grid(row=br + 2, column=0, padx=20, pady=(0, 6), sticky="w")
 
-        # capabilities display
         self.model_caps_lbl = ctk.CTkLabel(t_api, text="",
             font=ctk.CTkFont(size=FONT_XS), text_color=TEXT_DIM)
-        self.model_caps_lbl.grid(row=8, column=0, padx=20, pady=(0, 8), sticky="w")
+        self.model_caps_lbl.grid(row=br + 3, column=0, padx=20, pady=(0, 8), sticky="w")
         self.model_menu.configure(command=self._on_model_selected)
-
-        # update cap label for initial model
         self.window.after(200, self._on_model_selected)
 
         sep2 = ctk.CTkFrame(t_api, height=1, fg_color="#1a2a44")
-        sep2.grid(row=9, column=0, padx=20, sticky="ew", pady=4)
+        sep2.grid(row=br + 4, column=0, padx=20, sticky="ew", pady=4)
 
         ctk.CTkLabel(t_api, text=self._tr("temp_label"),
             font=ctk.CTkFont(size=FONT_MD, weight="bold"), text_color=TEXT_BRIGHT
-        ).grid(row=10, column=0, padx=20, pady=(10, 8), sticky="w")
+        ).grid(row=br + 5, column=0, padx=20, pady=(10, 8), sticky="w")
         tf = ctk.CTkFrame(t_api, fg_color="transparent")
-        tf.grid(row=11, column=0, padx=20, pady=5, sticky="w")
+        tf.grid(row=br + 6, column=0, padx=20, pady=5, sticky="w")
         self.temp_slider = ctk.CTkSlider(tf, from_=0, to=1, number_of_steps=20,
             width=280, height=18,
             fg_color="#112244", progress_color=ACCENT, button_color="#0088cc",
@@ -1059,13 +1077,13 @@ class MainWindow:
         self.temp_slider.configure(command=lambda v: self.temp_label.configure(text=f"{v:.1f}"))
         ctk.CTkLabel(t_api, text=self._tr("temp_hint"),
             font=ctk.CTkFont(size=FONT_XS), text_color=TEXT_DIM
-        ).grid(row=12, column=0, padx=20, pady=(2, 15), sticky="w")
+        ).grid(row=br + 7, column=0, padx=20, pady=(2, 15), sticky="w")
 
         ctk.CTkButton(t_api, text="💾 " + self._tr("save_api_btn"),
             command=lambda: self._save_single("api_model"),
             fg_color="#004466", hover_color="#006688", corner_radius=8, height=34,
             font=ctk.CTkFont(size=FONT_SM)
-        ).grid(row=13, column=0, padx=20, pady=(10, 20), sticky="w")
+        ).grid(row=br + 8, column=0, padx=20, pady=(10, 20), sticky="w")
 
         # ── Tab: General ──
         t_gen = tabview.add("⚙  " + self._tr("tab_general"))
@@ -1287,6 +1305,8 @@ class MainWindow:
                 return
             set_key(ENV_PATH, "OLLAMA_API_KEY", k)
             self.ollama.set_api_key(k)
+            bk = self.brave_key_entry.get()
+            set_key(ENV_PATH, "BRAVE_API_KEY", bk)
             m = self.model_var.get()
             t = str(self.temp_slider.get())
             set_key(ENV_PATH, "OLLAMA_MODEL", m)
@@ -1301,6 +1321,8 @@ class MainWindow:
         k = self.api_key_entry.get()
         if k:
             set_key(ENV_PATH, "OLLAMA_API_KEY", k)
+        bk = self.brave_key_entry.get()
+        set_key(ENV_PATH, "BRAVE_API_KEY", bk)
         set_key(ENV_PATH, "OLLAMA_MODEL", self.model_var.get())
         set_key(ENV_PATH, "OLLAMA_TEMPERATURE", str(self.temp_slider.get()))
         messagebox.showinfo(self._tr("config_title"), self._tr("all_saved"))

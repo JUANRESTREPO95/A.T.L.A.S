@@ -1,4 +1,29 @@
+import requests
 from ddgs import DDGS
+
+BRAVE_URL = "https://api.search.brave.com/res/v1/web/search"
+
+
+def brave_search(query, api_key, max_results=5):
+    try:
+        resp = requests.get(BRAVE_URL, headers={
+            "Accept": "application/json",
+            "Accept-Encoding": "gzip",
+            "X-Subscription-Token": api_key,
+        }, params={"q": query, "count": max_results}, timeout=10)
+        if resp.status_code != 200:
+            return None
+        data = resp.json()
+        results = []
+        for item in (data.get("web", {}) or {}).get("results", []):
+            title = (item.get("title") or "").strip()
+            desc = (item.get("description") or "").strip()
+            url = (item.get("url") or "").strip()
+            if title:
+                results.append({"title": title, "body": desc, "url": url})
+        return _fmt(results) if results else None
+    except Exception:
+        return None
 
 
 def _gen_queries(query):
@@ -21,7 +46,12 @@ def _gen_queries(query):
     return base
 
 
-def search_web(query, max_results=5):
+def search_web(query, brave_api_key=None, max_results=5):
+    if brave_api_key:
+        r = brave_search(query, brave_api_key, max_results)
+        if r:
+            return r
+
     try:
         queries = _gen_queries(query)
         seen = set()
@@ -44,12 +74,12 @@ def search_web(query, max_results=5):
                     break
         if not all_results:
             return None
-        return _format_results(all_results[:max_results * 2])
+        return _fmt(all_results[:max_results * 2])
     except Exception:
         return None
 
 
-def _format_results(results):
+def _fmt(results):
     lines = []
     for r in results:
         title = r.get("title", "").strip()

@@ -858,16 +858,15 @@ class MainWindow:
 
             update_thinking("⏳ Pensando...")
             full = list(self.messages)
-            today = datetime.now().strftime("%A %d de %B de %Y")
+            today = datetime.now().strftime("%d/%m/%Y")
             if web_info:
                 trimmed = "\n".join(web_info.split("\n")[:30])
                 user_msg_combined = (
-                    f"Hoy es {today}.\n\n"
-                    f"{msg}\n\n"
-                    f"Datos obtenidos de internet ahora mismo:\n{trimmed}"
+                    f"[Contexto — {today}]\n{trimmed}\n\n"
+                    f"---\n{msg}"
                 )
             else:
-                user_msg_combined = f"Hoy es {today}.\n\n{msg}"
+                user_msg_combined = f"[Contexto — {today}]\n\n{msg}"
             full.append({"role": "user", "content": user_msg_combined})
             ok, result = self.ollama.chat(model, full, temperature=temp)
             self.window.after(0, lambda: self._handle_chat_response(thinking_frame, ok, result, msg))

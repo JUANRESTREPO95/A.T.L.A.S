@@ -1,8 +1,10 @@
 import customtkinter as ctk
 from tkinter import messagebox, Canvas
-import os, math, random
+import os, math, random, threading, json
 from dotenv import load_dotenv, set_key
 from datetime import datetime
+import psutil
+import requests
 
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("dark-blue")
@@ -13,8 +15,154 @@ PANEL_COLOR = "#0b0f1a"
 BORDER_COLOR = "#1a2a44"
 ACCENT = "#00bbff"
 ACCENT_DIM = "#006688"
-TEXT_DIM = "#557799"
-TEXT_BRIGHT = "#88bbdd"
+TEXT_DIM = "#7799bb"
+TEXT_BRIGHT = "#cceeff"
+
+FONT_XS = 10
+FONT_SM = 11
+FONT_MD = 13
+FONT_LG = 16
+FONT_XL = 20
+FONT_XXL = 28
+
+LANG = {
+    "es": {
+        "window_title": "ATLAS - Asistente Personal",
+        "online": "Online",
+        "inactive": "Inactivo",
+        "listening": "Escuchando palabra de activación...",
+        "type_msg": "Escribe un mensaje...",
+        "conversation": "Conversación",
+        "welcome_msg": "Hola, soy ATLAS.\nEl backend está desconectado.\nAlgunas funciones pueden estar limitadas.\n¿Cómo puedo ayudarte hoy?",
+        "sys_stats": "Estadísticas del Sistema",
+        "cpu_usage": "Uso de CPU",
+        "ram_usage": "Uso de RAM",
+        "disk": "Disco",
+        "weather": "Clima",
+        "camera": "Cámara",
+        "camera_inactive": "La cámara está inactiva. Haz clic en el botón de encendido para iniciar.",
+        "sys_uptime": "Tiempo Activo",
+        "running_for": "Sistema funcionando por:",
+        "session": "Sesión",
+        "commands": "Comandos",
+        "sys_load": "Carga del Sistema",
+        "moderate": "Moderada",
+        "humidity": "Humedad",
+        "wind": "Viento",
+        "feels": "Sensación",
+        "city_not_set": "Ciudad no configurada",
+        "config_title": "Configuración",
+        "tab_clima": "Clima",
+        "tab_api": "API + Modelo",
+        "tab_general": "General",
+        "clima_search": "Buscar ciudad para el clima:",
+        "clima_example": "Ej: medellin, london, queretaro, tokyo",
+        "clima_search_btn": "Buscar",
+        "clima_save_btn": "Guardar ciudad mostrada",
+        "clima_preview": "Resumen del clima",
+        "clima_city": "Ciudad:",
+        "clima_temp": "Temperatura:",
+        "clima_desc": "Estado:",
+        "clima_hum": "Humedad:",
+        "clima_wind": "Viento:",
+        "clima_feel": "Sensación térmica:",
+        "api_key_label": "API Key de Ollama Cloud:",
+        "api_key_hint": "Tu API key de Ollama Cloud para conectar el asistente",
+        "model_label": "Modelo de IA:",
+        "model_hint": "Modelo que usará ATLAS para responder",
+        "temp_label": "Temperatura (0.0 - 1.0):",
+        "temp_hint": "Controla la creatividad del modelo (más alto = más creativo)",
+        "save_api_btn": "Guardar API + Modelo",
+        "gen_label": "Configuración general",
+        "gen_hint": "Aquí aparecerán más opciones generales en futuras actualizaciones.",
+        "lang_label": "Idioma / Language:",
+        "save_all_btn": "Guardar todo",
+        "close_btn": "Cerrar",
+        "searching": "Buscando...",
+        "no_results": "No se encontraron ciudades",
+        "loading_weather": "Cargando clima...",
+        "weather_error": "Error al obtener clima",
+        "conn_error": "Error de conexión",
+        "save_city_first": "Primero busca y selecciona una ciudad.",
+        "city_saved": "Ciudad guardada:",
+        "enter_city": "Escribe el nombre de una ciudad.",
+        "api_empty_warn": "La API Key no puede estar vacía.",
+        "api_saved": "API Key, modelo y temperatura guardados.",
+        "all_saved": "Toda la configuración guardada.",
+        "lang_saved": "Idioma cambiado a",
+        "system_stats": "Estadísticas del Sistema",
+        "cpu_box": "CPU",
+        "mem_box": "Memoria",
+    },
+    "en": {
+        "window_title": "ATLAS - Personal Assistant",
+        "online": "Online",
+        "inactive": "Inactive",
+        "listening": "Listening for wake word...",
+        "type_msg": "Type a message...",
+        "conversation": "Conversation",
+        "welcome_msg": "Hello, I am ATLAS.\nBackend is offline.\nSome features may be limited.\nHow can I assist you today?",
+        "sys_stats": "System Stats",
+        "cpu_usage": "CPU Usage",
+        "ram_usage": "RAM Usage",
+        "disk": "Disk",
+        "weather": "Weather",
+        "camera": "Camera",
+        "camera_inactive": "Camera is inactive. Click the power button to start.",
+        "sys_uptime": "System Uptime",
+        "running_for": "System Running For:",
+        "session": "Session",
+        "commands": "Commands",
+        "sys_load": "System Load",
+        "moderate": "Moderate",
+        "humidity": "Humidity",
+        "wind": "Wind",
+        "feels": "Feels Like",
+        "city_not_set": "City not set",
+        "config_title": "Configuration",
+        "tab_clima": "Weather",
+        "tab_api": "API + Model",
+        "tab_general": "General",
+        "clima_search": "Search city for weather:",
+        "clima_example": "E.g.: medellin, london, queretaro, tokyo",
+        "clima_search_btn": "Search",
+        "clima_save_btn": "Save displayed city",
+        "clima_preview": "Weather summary",
+        "clima_city": "City:",
+        "clima_temp": "Temperature:",
+        "clima_desc": "Condition:",
+        "clima_hum": "Humidity:",
+        "clima_wind": "Wind:",
+        "clima_feel": "Feels like:",
+        "api_key_label": "Ollama Cloud API Key:",
+        "api_key_hint": "Your Ollama Cloud API key to connect the assistant",
+        "model_label": "AI Model:",
+        "model_hint": "Model that ATLAS will use to respond",
+        "temp_label": "Temperature (0.0 - 1.0):",
+        "temp_hint": "Controls model creativity (higher = more creative)",
+        "save_api_btn": "Save API + Model",
+        "gen_label": "General settings",
+        "gen_hint": "More general options will appear here in future updates.",
+        "lang_label": "Idioma / Language:",
+        "save_all_btn": "Save all",
+        "close_btn": "Close",
+        "searching": "Searching...",
+        "no_results": "No cities found",
+        "loading_weather": "Loading weather...",
+        "weather_error": "Error fetching weather",
+        "conn_error": "Connection error",
+        "save_city_first": "First search and select a city.",
+        "city_saved": "City saved:",
+        "enter_city": "Enter a city name.",
+        "api_empty_warn": "API Key cannot be empty.",
+        "api_saved": "API Key, model and temperature saved.",
+        "all_saved": "All settings saved.",
+        "lang_saved": "Language changed to",
+        "system_stats": "System Stats",
+        "cpu_box": "CPU",
+        "mem_box": "Memory",
+    },
+}
 
 
 class Particle:
@@ -102,29 +250,52 @@ class AtlasAnim:
 
 
 def glass_frame(parent, **kwargs):
-    kw = {"fg_color": PANEL_COLOR, "corner_radius": 10, "border_width": 1, "border_color": BORDER_COLOR}
+    kw = {"fg_color": PANEL_COLOR, "corner_radius": 12, "border_width": 1, "border_color": BORDER_COLOR}
     kw.update(kwargs)
     return ctk.CTkFrame(parent, **kw)
 
 
 class MainWindow:
     def __init__(self):
-        self.window = ctk.CTk()
-        self.window.title("ATLAS - Asistente Personal")
-        self.window.geometry("1280x720")
-        self.window.minsize(1100, 620)
         load_dotenv(ENV_PATH)
+        self.lang_code = os.getenv("ATLAS_LANG", "es")
+        if self.lang_code not in LANG:
+            self.lang_code = "es"
+        self.tr = LANG[self.lang_code]
+
+        self.window = ctk.CTk()
+        self.window.title(self.tr["window_title"])
+        self.window.geometry("1400x800")
+        self.window.minsize(1200, 680)
+
+        self.sys_stats = {"cpu": 0, "ram_pct": 0, "ram_used": 0, "ram_total": 0, "disk_used": 0, "disk_total": 0}
+        self.weather_data = None
+
+        self._build()
+
+    def _tr(self, key):
+        if key in self.tr:
+            return self.tr[key]
+        return LANG.get(self.lang_code, LANG["es"]).get(key, key)
+
+    def _reload_lang(self):
+        self.tr = LANG[self.lang_code]
+
+    def _rebuild_ui(self):
+        for widget in self.window.winfo_children():
+            widget.destroy()
+        self.window.title(self._tr("window_title"))
+        if hasattr(self, 'anim') and self.anim:
+            self.anim.stop()
         self._build()
 
     def _build(self):
-        # rows: topbar, main, bottom
-        self.window.grid_rowconfigure(0, weight=0, minsize=44)
+        self.window.grid_rowconfigure(0, weight=0, minsize=50)
         self.window.grid_rowconfigure(1, weight=1)
-        self.window.grid_rowconfigure(2, weight=0, minsize=56)
-        # columns: left, center, right
-        self.window.grid_columnconfigure(0, weight=0, minsize=260)
+        self.window.grid_rowconfigure(2, weight=0, minsize=62)
+        self.window.grid_columnconfigure(0, weight=0, minsize=290)
         self.window.grid_columnconfigure(1, weight=1)
-        self.window.grid_columnconfigure(2, weight=0, minsize=300)
+        self.window.grid_columnconfigure(2, weight=0, minsize=340)
 
         self._create_topbar()
         self._create_left_panels()
@@ -132,59 +303,57 @@ class MainWindow:
         self._create_right_panel()
         self._create_bottombar()
 
-        # start animation
-        self.anim = None
         self.canvas.after(100, self._start_anim)
+        self._update_system_stats()
+        self._fetch_weather()
 
     # ─── TOP BAR ─────────────────────────────────
     def _create_topbar(self):
-        bar = ctk.CTkFrame(self.window, fg_color="#080b14", corner_radius=0, height=44)
-        bar.grid(row=0, column=0, columnspan=3, sticky="ew", padx=0, pady=0)
+        bar = ctk.CTkFrame(self.window, fg_color="#080b14", corner_radius=0, height=50)
+        bar.grid(row=0, column=0, columnspan=3, sticky="ew")
         bar.grid_columnconfigure(2, weight=1)
         bar.grid_propagate(False)
 
-        # logo
-        frame_left = ctk.CTkFrame(bar, fg_color="transparent")
-        frame_left.grid(row=0, column=0, padx=(16, 0), pady=0, sticky="w")
-        ctk.CTkLabel(frame_left, text="A T L A S", font=ctk.CTkFont(size=16, weight="bold"),
+        left = ctk.CTkFrame(bar, fg_color="transparent")
+        left.grid(row=0, column=0, padx=(18, 0), pady=0, sticky="w")
+        ctk.CTkLabel(left, text="A T L A S", font=ctk.CTkFont(size=18, weight="bold"),
             text_color=ACCENT).pack(side="left")
-        ctk.CTkLabel(frame_left, text="  ●", font=ctk.CTkFont(size=12), text_color="#00cc44").pack(side="left", padx=(6, 0))
-        ctk.CTkLabel(frame_left, text="Online", font=ctk.CTkFont(size=11), text_color="#44cc66").pack(side="left", padx=(3, 0))
+        ctk.CTkLabel(left, text="  ●", font=ctk.CTkFont(size=13), text_color="#00cc44").pack(side="left", padx=(8, 0))
+        self.status_lbl = ctk.CTkLabel(left, text=self._tr("online"), font=ctk.CTkFont(size=FONT_SM), text_color="#44cc66")
+        self.status_lbl.pack(side="left", padx=(4, 0))
 
-        # center spacer (column 2 has weight=1)
+        right = ctk.CTkFrame(bar, fg_color="transparent")
+        right.grid(row=0, column=3, padx=(0, 18), pady=0, sticky="e")
 
-        # right side info
-        frame_right = ctk.CTkFrame(bar, fg_color="transparent")
-        frame_right.grid(row=0, column=3, padx=(0, 16), pady=0, sticky="e")
+        self._update_clock(right)
 
-        self._update_clock(frame_right)
+        sep = ctk.CTkLabel(right, text="|", text_color="#334466", font=ctk.CTkFont(size=FONT_MD))
+        sep.pack(side="left", padx=8)
 
-        sep = ctk.CTkLabel(frame_right, text="|", text_color="#334466", font=ctk.CTkFont(size=14))
-        sep.pack(side="left", padx=6)
-
-        ctk.CTkLabel(frame_right, text="📅", font=ctk.CTkFont(size=12)).pack(side="left")
-        self.date_lbl = ctk.CTkLabel(frame_right, text="", font=ctk.CTkFont(size=11), text_color=TEXT_DIM)
-        self.date_lbl.pack(side="left", padx=(3, 10))
+        ctk.CTkLabel(right, text="📅", font=ctk.CTkFont(size=FONT_SM)).pack(side="left")
+        self.date_lbl = ctk.CTkLabel(right, text="", font=ctk.CTkFont(size=FONT_SM), text_color=TEXT_DIM)
+        self.date_lbl.pack(side="left", padx=(4, 12))
         self._update_date()
 
-        ctk.CTkLabel(frame_right, text="🌤  25.2°C Querétaro", font=ctk.CTkFont(size=11),
-            text_color=TEXT_DIM).pack(side="left", padx=(0, 10))
+        ctk.CTkLabel(right, text="🌤", font=ctk.CTkFont(size=FONT_SM)).pack(side="left")
+        self.weather_top_lbl = ctk.CTkLabel(right, text="--", font=ctk.CTkFont(size=FONT_SM), text_color=TEXT_DIM)
+        self.weather_top_lbl.pack(side="left", padx=(3, 12))
 
-        self.gear_btn = ctk.CTkLabel(frame_right, text="⚙", font=ctk.CTkFont(size=16),
-            text_color="#446688")
+        self.gear_btn = ctk.CTkButton(right, text="⚙ " + self._tr("config_title"),
+            command=self.show_config_frame,
+            fg_color="#0a1a33", hover_color="#0f2a55", text_color=TEXT_BRIGHT,
+            corner_radius=8, width=110, height=30, font=ctk.CTkFont(size=FONT_SM))
         self.gear_btn.pack(side="left")
-        self.gear_btn.bind("<Button-1>", lambda e: self.show_config_frame())
 
-        # schedule clock update
         self._clock_updater()
 
     def _update_clock(self, parent):
+        now = datetime.now()
         if hasattr(self, 'clock_lbl'):
             self.clock_lbl.destroy()
-        now = datetime.now()
         self.clock_lbl = ctk.CTkLabel(parent, text=f"🕐 {now.strftime('%I:%M:%S %p').lstrip('0')}",
-            font=ctk.CTkFont(size=11), text_color=TEXT_DIM)
-        self.clock_lbl.pack(side="left", padx=(0, 0))
+            font=ctk.CTkFont(size=FONT_SM), text_color=TEXT_DIM)
+        self.clock_lbl.pack(side="left")
 
     def _update_date(self):
         self.date_lbl.configure(text=datetime.now().strftime("%B %d, %Y"))
@@ -195,6 +364,65 @@ class MainWindow:
             self.clock_lbl.configure(text=f"🕐 {now.strftime('%I:%M:%S %p').lstrip('0')}")
         self.window.after(1000, self._clock_updater)
 
+    # ─── SYSTEM STATS ────────────────────────────
+    def _update_system_stats(self):
+        try:
+            self.sys_stats["cpu"] = psutil.cpu_percent(interval=0)
+            mem = psutil.virtual_memory()
+            self.sys_stats["ram_pct"] = mem.percent
+            self.sys_stats["ram_used"] = mem.used // (1024**3)
+            self.sys_stats["ram_total"] = mem.total // (1024**3)
+            disk = psutil.disk_usage('/')
+            self.sys_stats["disk_used"] = disk.used // (1024**3)
+            self.sys_stats["disk_total"] = disk.total // (1024**3)
+        except Exception:
+            pass
+
+        self._refresh_system_panel()
+        self._refresh_uptime_panel()
+        self.window.after(2000, self._update_system_stats)
+
+    # ─── WEATHER ─────────────────────────────────
+    def _fetch_weather(self):
+        city = os.getenv("WEATHER_CITY", "").strip()
+        if not city:
+            self.weather_data = None
+            self._refresh_weather_panel()
+            self.weather_top_lbl.configure(text="--")
+            return
+
+        def fetch():
+            try:
+                url = f"https://wttr.in/{city}?format=j1&lang={self.lang_code}"
+                resp = requests.get(url, timeout=8)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    curr = data["current_condition"][0]
+                    self.weather_data = {
+                        "temp": curr["temp_C"],
+                        "desc": curr["weatherDesc"][0]["value"],
+                        "humidity": curr["humidity"],
+                        "wind": curr["windspeedKmph"],
+                        "feels": curr["FeelsLikeC"],
+                        "city": city,
+                    }
+                else:
+                    self.weather_data = None
+            except Exception:
+                self.weather_data = None
+
+            self.window.after(0, self._refresh_weather_panel)
+            self.window.after(0, self._refresh_weather_top)
+
+        threading.Thread(target=fetch, daemon=True).start()
+
+    def _refresh_weather_top(self):
+        if self.weather_data:
+            self.weather_top_lbl.configure(
+                text=f"{self.weather_data['temp']}°C {self.weather_data['city']}")
+        else:
+            self.weather_top_lbl.configure(text="--")
+
     # ─── LEFT PANELS ─────────────────────────────
     def _create_left_panels(self):
         container = ctk.CTkFrame(self.window, fg_color="transparent")
@@ -202,130 +430,225 @@ class MainWindow:
         container.grid_rowconfigure((0, 1, 2, 3), weight=1, uniform="left")
         container.grid_columnconfigure(0, weight=1)
 
-        self._panel_system(container, 0)
-        self._panel_weather(container, 1)
-        self._panel_camera(container, 2)
-        self._panel_uptime(container, 3)
+        self._create_panel_system(container, 0)
+        self._create_panel_weather(container, 1)
+        self._create_panel_camera(container, 2)
+        self._create_panel_uptime(container, 3)
 
-    def _panel_system(self, parent, row):
+    # Panel System Stats
+    def _create_panel_system(self, parent, row):
         p = glass_frame(parent)
         p.grid(row=row, column=0, sticky="nsew", padx=2, pady=2)
         p.grid_columnconfigure(0, weight=1)
         p.grid_rowconfigure(4, weight=1)
 
         hdr = ctk.CTkFrame(p, fg_color="transparent")
-        hdr.grid(row=0, column=0, padx=10, pady=(8, 0), sticky="ew")
-        ctk.CTkLabel(hdr, text="System Stats", font=ctk.CTkFont(size=11, weight="bold"),
+        hdr.grid(row=0, column=0, padx=12, pady=(10, 0), sticky="ew")
+        ctk.CTkLabel(hdr, text=self._tr("system_stats"), font=ctk.CTkFont(size=FONT_MD, weight="bold"),
             text_color=TEXT_BRIGHT).pack(side="left")
-        ctk.CTkLabel(hdr, text="↻", font=ctk.CTkFont(size=12), text_color=TEXT_DIM).pack(side="right")
+        self.sys_refresh_lbl = ctk.CTkLabel(hdr, text="↻", font=ctk.CTkFont(size=FONT_SM), text_color=TEXT_DIM)
+        self.sys_refresh_lbl.pack(side="right")
 
-        stats = [
-            ("CPU Usage", "8%", 0.08),
-            ("RAM Usage", "7 GB / 16 GB", 0.44),
-        ]
-        for i, (label, val, prog) in enumerate(stats):
-            row_f = ctk.CTkFrame(p, fg_color="transparent")
-            row_f.grid(row=1+i, column=0, padx=10, pady=(6, 0), sticky="ew")
-            row_f.grid_columnconfigure(1, weight=1)
-            ctk.CTkLabel(row_f, text=label, font=ctk.CTkFont(size=9), text_color=TEXT_DIM).grid(row=0, column=0, sticky="w")
-            ctk.CTkLabel(row_f, text=val, font=ctk.CTkFont(size=9), text_color=TEXT_BRIGHT).grid(row=0, column=2, sticky="e")
-            bar = ctk.CTkProgressBar(row_f, height=4, fg_color="#0a1a2a", progress_color=ACCENT, corner_radius=2)
-            bar.grid(row=1, column=0, columnspan=3, sticky="ew", pady=(2, 0))
-            bar.set(prog)
+        self.sys_labels = {}
+        stats = [("cpu", self._tr("cpu_usage")), ("ram", self._tr("ram_usage"))]
+        for i, (key, label) in enumerate(stats):
+            rf = ctk.CTkFrame(p, fg_color="transparent")
+            rf.grid(row=1 + i, column=0, padx=12, pady=(8, 0), sticky="ew")
+            rf.grid_columnconfigure(1, weight=1)
+            ctk.CTkLabel(rf, text=label, font=ctk.CTkFont(size=FONT_XS), text_color=TEXT_DIM).grid(row=0, column=0, sticky="w")
+            val_lbl = ctk.CTkLabel(rf, text="--", font=ctk.CTkFont(size=FONT_XS), text_color=TEXT_BRIGHT)
+            val_lbl.grid(row=0, column=2, sticky="e")
+            bar = ctk.CTkProgressBar(rf, height=5, fg_color="#0a1a2a", progress_color=ACCENT, corner_radius=2)
+            bar.grid(row=1, column=0, columnspan=3, sticky="ew", pady=(3, 0))
+            bar.set(0)
+            self.sys_labels[key] = (val_lbl, bar)
 
         boxes = ctk.CTkFrame(p, fg_color="transparent")
-        boxes.grid(row=3, column=0, padx=10, pady=(8, 6), sticky="ew")
+        boxes.grid(row=3, column=0, padx=12, pady=(10, 4), sticky="ew")
         boxes.grid_columnconfigure((0, 1), weight=1)
-        for i, (l, v) in enumerate([("CPU", "8%"), ("Memory", "44%")]):
+        self.sys_boxes = {}
+        for i, k in enumerate(["cpu_box", "mem_box"]):
             b = ctk.CTkFrame(boxes, fg_color="#0a1220", corner_radius=6)
             b.grid(row=0, column=i, sticky="ew", padx=2)
-            ctk.CTkLabel(b, text=l, font=ctk.CTkFont(size=8), text_color=TEXT_DIM).pack()
-            ctk.CTkLabel(b, text=v, font=ctk.CTkFont(size=10, weight="bold"), text_color=ACCENT).pack()
+            self.sys_boxes[k] = b
 
-        disklbl = ctk.CTkLabel(p, text="Disk: 439 / 475 GB", font=ctk.CTkFont(size=9), text_color=TEXT_DIM)
-        disklbl.grid(row=4, column=0, padx=10, pady=(4, 8), sticky="w")
+        self.disk_lbl = ctk.CTkLabel(p, text=self._tr("disk") + ": --", font=ctk.CTkFont(size=FONT_XS), text_color=TEXT_DIM)
+        self.disk_lbl.grid(row=4, column=0, padx=12, pady=(4, 10), sticky="w")
 
-    def _panel_weather(self, parent, row):
+    def _refresh_system_panel(self):
+        s = self.sys_stats
+        if "cpu" in self.sys_labels:
+            vl, bar = self.sys_labels["cpu"]
+            vl.configure(text=f"{s['cpu']}%")
+            bar.set(s["cpu"] / 100)
+        if "ram" in self.sys_labels:
+            vl, bar = self.sys_labels["ram"]
+            vl.configure(text=f"{s['ram_used']} GB / {s['ram_total']} GB")
+            bar.set(s["ram_pct"] / 100)
+
+        if "cpu_box" in self.sys_boxes:
+            b = self.sys_boxes["cpu_box"]
+            for w in b.winfo_children():
+                w.destroy()
+            ctk.CTkLabel(b, text=self._tr("cpu_box"), font=ctk.CTkFont(size=FONT_XS),
+                text_color=TEXT_DIM).pack()
+            ctk.CTkLabel(b, text=f"{s['cpu']}%", font=ctk.CTkFont(size=FONT_MD, weight="bold"),
+                text_color=ACCENT).pack()
+        if "mem_box" in self.sys_boxes:
+            b = self.sys_boxes["mem_box"]
+            for w in b.winfo_children():
+                w.destroy()
+            ctk.CTkLabel(b, text=self._tr("mem_box"), font=ctk.CTkFont(size=FONT_XS),
+                text_color=TEXT_DIM).pack()
+            ctk.CTkLabel(b, text=f"{s['ram_pct']}%", font=ctk.CTkFont(size=FONT_MD, weight="bold"),
+                text_color=ACCENT).pack()
+
+        self.disk_lbl.configure(text=f"{self._tr('disk')}: {s['disk_used']} / {s['disk_total']} GB")
+
+    # Panel Weather
+    def _create_panel_weather(self, parent, row):
         p = glass_frame(parent)
         p.grid(row=row, column=0, sticky="nsew", padx=2, pady=2)
         p.grid_columnconfigure(0, weight=1)
 
         hdr = ctk.CTkFrame(p, fg_color="transparent")
-        hdr.grid(row=0, column=0, padx=10, pady=(6, 0), sticky="ew")
-        ctk.CTkLabel(hdr, text="Weather", font=ctk.CTkFont(size=11, weight="bold"),
+        hdr.grid(row=0, column=0, padx=12, pady=(8, 0), sticky="ew")
+        ctk.CTkLabel(hdr, text=self._tr("weather"), font=ctk.CTkFont(size=FONT_MD, weight="bold"),
             text_color=TEXT_BRIGHT).pack(side="left")
-        ctk.CTkLabel(hdr, text="↻", font=ctk.CTkFont(size=12), text_color=TEXT_DIM).pack(side="right")
+        ctk.CTkLabel(hdr, text="↻", font=ctk.CTkFont(size=FONT_SM), text_color=TEXT_DIM).pack(side="right")
 
         body = ctk.CTkFrame(p, fg_color="transparent")
-        body.grid(row=1, column=0, padx=10, pady=4, sticky="ew")
+        body.grid(row=1, column=0, padx=12, pady=6, sticky="ew")
         body.grid_columnconfigure(0, weight=1)
 
         top = ctk.CTkFrame(body, fg_color="transparent")
         top.grid(row=0, column=0, sticky="ew")
-        ctk.CTkLabel(top, text="☁", font=ctk.CTkFont(size=28), text_color="#7799bb").pack(side="left", padx=(0, 8))
-        ctk.CTkLabel(top, text="25.2°C", font=ctk.CTkFont(size=18, weight="bold"),
-            text_color=TEXT_BRIGHT).pack(side="left")
-        ctk.CTkLabel(top, text="overcast\nclouds", font=ctk.CTkFont(size=8), text_color=TEXT_DIM).pack(side="right")
+        self.weather_icon_lbl = ctk.CTkLabel(top, text="☁", font=ctk.CTkFont(size=32), text_color="#7799bb")
+        self.weather_icon_lbl.pack(side="left", padx=(0, 10))
+        self.weather_temp_lbl = ctk.CTkLabel(top, text="--", font=ctk.CTkFont(size=22, weight="bold"),
+            text_color=TEXT_BRIGHT)
+        self.weather_temp_lbl.pack(side="left")
+        self.weather_desc_lbl = ctk.CTkLabel(top, text="", font=ctk.CTkFont(size=FONT_XS), text_color=TEXT_DIM)
+        self.weather_desc_lbl.pack(side="right")
 
-        ctk.CTkLabel(body, text="Querétaro, MX", font=ctk.CTkFont(size=9), text_color=TEXT_DIM).grid(row=1, column=0, sticky="w")
+        self.weather_city_lbl = ctk.CTkLabel(body, text=self._tr("city_not_set"), font=ctk.CTkFont(size=FONT_SM),
+            text_color=TEXT_DIM)
+        self.weather_city_lbl.grid(row=1, column=0, sticky="w", pady=(4, 0))
 
         mini = ctk.CTkFrame(body, fg_color="transparent")
-        mini.grid(row=2, column=0, sticky="ew", pady=(4, 6))
-        ctk.CTkLabel(mini, text="Humidity: 94%", font=ctk.CTkFont(size=8), text_color=TEXT_DIM).pack(side="left", padx=(0, 6))
-        ctk.CTkLabel(mini, text="Wind: 5.8 m/s", font=ctk.CTkFont(size=8), text_color=TEXT_DIM).pack(side="left", padx=(0, 6))
-        ctk.CTkLabel(mini, text="Feels: 26.3°C", font=ctk.CTkFont(size=8), text_color=TEXT_DIM).pack(side="left")
+        mini.grid(row=2, column=0, sticky="ew", pady=(6, 8))
+        self.weather_hum_lbl = ctk.CTkLabel(mini, text=self._tr("humidity") + ": --", font=ctk.CTkFont(size=FONT_XS), text_color=TEXT_DIM)
+        self.weather_hum_lbl.pack(side="left", padx=(0, 8))
+        self.weather_wind_lbl = ctk.CTkLabel(mini, text=self._tr("wind") + ": --", font=ctk.CTkFont(size=FONT_XS), text_color=TEXT_DIM)
+        self.weather_wind_lbl.pack(side="left", padx=(0, 8))
+        self.weather_feel_lbl = ctk.CTkLabel(mini, text=self._tr("feels") + ": --", font=ctk.CTkFont(size=FONT_XS), text_color=TEXT_DIM)
+        self.weather_feel_lbl.pack(side="left")
 
-    def _panel_camera(self, parent, row):
+    def _refresh_weather_panel(self):
+        w = self.weather_data
+        if w:
+            self.weather_temp_lbl.configure(text=f"{w['temp']}°C")
+            self.weather_desc_lbl.configure(text=w["desc"])
+            self.weather_city_lbl.configure(text=w["city"])
+            self.weather_hum_lbl.configure(text=f"{self._tr('humidity')}: {w['humidity']}%")
+            self.weather_wind_lbl.configure(text=f"{self._tr('wind')}: {w['wind']} m/s")
+            self.weather_feel_lbl.configure(text=f"{self._tr('feels')}: {w['feels']}°C")
+        else:
+            self.weather_temp_lbl.configure(text="--")
+            self.weather_desc_lbl.configure(text="")
+            self.weather_city_lbl.configure(text=self._tr("city_not_set"))
+            self.weather_hum_lbl.configure(text=self._tr("humidity") + ": --")
+            self.weather_wind_lbl.configure(text=self._tr("wind") + ": --")
+            self.weather_feel_lbl.configure(text=self._tr("feels") + ": --")
+
+    # Panel Camera
+    def _create_panel_camera(self, parent, row):
         p = glass_frame(parent)
         p.grid(row=row, column=0, sticky="nsew", padx=2, pady=2)
         p.grid_columnconfigure(0, weight=1)
 
         hdr = ctk.CTkFrame(p, fg_color="transparent")
-        hdr.grid(row=0, column=0, padx=10, pady=(6, 0), sticky="ew")
-        ctk.CTkLabel(hdr, text="Camera", font=ctk.CTkFont(size=11, weight="bold"),
+        hdr.grid(row=0, column=0, padx=12, pady=(8, 0), sticky="ew")
+        ctk.CTkLabel(hdr, text=self._tr("camera"), font=ctk.CTkFont(size=FONT_MD, weight="bold"),
             text_color=TEXT_BRIGHT).pack(side="left")
-        ctk.CTkLabel(hdr, text="📷  🖼  ⏻", font=ctk.CTkFont(size=10), text_color=TEXT_DIM).pack(side="right")
+        ctk.CTkLabel(hdr, text="📷  🖼  ⏻", font=ctk.CTkFont(size=FONT_SM), text_color=TEXT_DIM).pack(side="right")
 
-        cam_box = ctk.CTkFrame(p, fg_color="#040810", corner_radius=8, height=50)
-        cam_box.grid(row=1, column=0, padx=10, pady=(8, 0), sticky="ew")
+        cam_box = ctk.CTkFrame(p, fg_color="#040810", corner_radius=8, height=60)
+        cam_box.grid(row=1, column=0, padx=12, pady=(10, 0), sticky="ew")
         cam_box.grid_propagate(False)
-        ctk.CTkLabel(cam_box, text="📷", font=ctk.CTkFont(size=20), text_color="#334455").pack(expand=True)
-        ctk.CTkLabel(p, text="Camera is inactive. Click the power button to start.",
-            font=ctk.CTkFont(size=7), text_color=TEXT_DIM).grid(row=2, column=0, padx=10, pady=(4, 6))
+        ctk.CTkLabel(cam_box, text="📷", font=ctk.CTkFont(size=24), text_color="#334455").pack(expand=True)
+        ctk.CTkLabel(p, text=self._tr("camera_inactive"),
+            font=ctk.CTkFont(size=FONT_XS), text_color=TEXT_DIM).grid(row=2, column=0, padx=12, pady=(6, 10))
 
-    def _panel_uptime(self, parent, row):
+    # Panel System Uptime
+    def _create_panel_uptime(self, parent, row):
         p = glass_frame(parent)
         p.grid(row=row, column=0, sticky="nsew", padx=2, pady=2)
         p.grid_columnconfigure(0, weight=1)
+        self.uptime_panel = p
 
         hdr = ctk.CTkFrame(p, fg_color="transparent")
-        hdr.grid(row=0, column=0, padx=10, pady=(6, 0), sticky="ew")
-        ctk.CTkLabel(hdr, text="System Uptime", font=ctk.CTkFont(size=11, weight="bold"),
+        hdr.grid(row=0, column=0, padx=12, pady=(8, 0), sticky="ew")
+        ctk.CTkLabel(hdr, text=self._tr("sys_uptime"), font=ctk.CTkFont(size=FONT_MD, weight="bold"),
             text_color=TEXT_BRIGHT).pack(side="left")
-        ctk.CTkLabel(hdr, text="00:07:19", font=ctk.CTkFont(size=9), text_color=TEXT_DIM).pack(side="right")
+        self.uptime_header_lbl = ctk.CTkLabel(hdr, text="--", font=ctk.CTkFont(size=FONT_XS), text_color=TEXT_DIM)
+        self.uptime_header_lbl.pack(side="right")
 
-        ctk.CTkLabel(p, text="System Running For:", font=ctk.CTkFont(size=8), text_color=TEXT_DIM).grid(
-            row=1, column=0, padx=10, pady=(4, 0), sticky="w")
-        ctk.CTkLabel(p, text="00:07:19", font=ctk.CTkFont(size=20, weight="bold"),
-            text_color=ACCENT).grid(row=2, column=0, padx=10, sticky="w")
+        ctk.CTkLabel(p, text=self._tr("running_for"), font=ctk.CTkFont(size=FONT_XS), text_color=TEXT_DIM).grid(
+            row=1, column=0, padx=12, pady=(6, 0), sticky="w")
+        self.uptime_val_lbl = ctk.CTkLabel(p, text="--", font=ctk.CTkFont(size=22, weight="bold"),
+            text_color=ACCENT)
+        self.uptime_val_lbl.grid(row=2, column=0, padx=12, sticky="w")
 
         boxes = ctk.CTkFrame(p, fg_color="transparent")
-        boxes.grid(row=3, column=0, padx=10, pady=(4, 2), sticky="ew")
+        boxes.grid(row=3, column=0, padx=12, pady=(6, 2), sticky="ew")
         boxes.grid_columnconfigure((0, 1), weight=1)
-        for i, (l, v) in enumerate([("Session", "1"), ("Commands", "0")]):
+        self.uptime_boxes = {}
+        for i, k in enumerate(["session", "commands"]):
             b = ctk.CTkFrame(boxes, fg_color="#0a1220", corner_radius=6)
             b.grid(row=0, column=i, sticky="ew", padx=2)
-            ctk.CTkLabel(b, text=l, font=ctk.CTkFont(size=8), text_color=TEXT_DIM).pack()
-            ctk.CTkLabel(b, text=v, font=ctk.CTkFont(size=10, weight="bold"), text_color=ACCENT).pack()
+            self.uptime_boxes[k] = b
 
         load_f = ctk.CTkFrame(p, fg_color="transparent")
-        load_f.grid(row=4, column=0, padx=10, pady=(4, 8), sticky="ew")
+        load_f.grid(row=4, column=0, padx=12, pady=(4, 10), sticky="ew")
         load_f.grid_columnconfigure(1, weight=1)
-        ctk.CTkLabel(load_f, text="System Load:", font=ctk.CTkFont(size=8), text_color=TEXT_DIM).grid(row=0, column=0, sticky="w")
-        ctk.CTkLabel(load_f, text="Moderate 26%", font=ctk.CTkFont(size=8), text_color=TEXT_DIM).grid(row=0, column=2, sticky="e")
-        bar = ctk.CTkProgressBar(load_f, height=4, fg_color="#0a1a2a", progress_color="#ffaa00", corner_radius=2)
-        bar.grid(row=1, column=0, columnspan=3, sticky="ew", pady=(2, 0))
-        bar.set(0.26)
+        ctk.CTkLabel(load_f, text=self._tr("sys_load") + ":", font=ctk.CTkFont(size=FONT_XS), text_color=TEXT_DIM).grid(row=0, column=0, sticky="w")
+        self.load_pct_lbl = ctk.CTkLabel(load_f, text="--", font=ctk.CTkFont(size=FONT_XS), text_color=TEXT_DIM)
+        self.load_pct_lbl.grid(row=0, column=2, sticky="e")
+        self.load_bar = ctk.CTkProgressBar(load_f, height=5, fg_color="#0a1a2a", progress_color="#ffaa00", corner_radius=2)
+        self.load_bar.grid(row=1, column=0, columnspan=3, sticky="ew", pady=(3, 0))
+
+    def _refresh_uptime_panel(self):
+        try:
+            uptime_sec = psutil.boot_time()
+            delta = datetime.now() - datetime.fromtimestamp(uptime_sec)
+            total_sec = int(delta.total_seconds())
+            h, r = divmod(total_sec, 3600)
+            m, s = divmod(r, 60)
+            uptime_str = f"{h:02d}:{m:02d}:{s:02d}"
+            self.uptime_val_lbl.configure(text=uptime_str)
+            self.uptime_header_lbl.configure(text=uptime_str)
+
+            load = psutil.getloadavg()
+            load_pct = min(100, int((load[0] / psutil.cpu_count()) * 100))
+            self.load_pct_lbl.configure(text=f"{self._tr('moderate')} {load_pct}%")
+            self.load_bar.set(load_pct / 100)
+
+            for w in self.uptime_boxes["session"].winfo_children():
+                w.destroy()
+            ctk.CTkLabel(self.uptime_boxes["session"], text=self._tr("session"),
+                font=ctk.CTkFont(size=FONT_XS), text_color=TEXT_DIM).pack()
+            ctk.CTkLabel(self.uptime_boxes["session"], text="1",
+                font=ctk.CTkFont(size=FONT_MD, weight="bold"), text_color=ACCENT).pack()
+
+            for w in self.uptime_boxes["commands"].winfo_children():
+                w.destroy()
+            ctk.CTkLabel(self.uptime_boxes["commands"], text=self._tr("commands"),
+                font=ctk.CTkFont(size=FONT_XS), text_color=TEXT_DIM).pack()
+            ctk.CTkLabel(self.uptime_boxes["commands"], text="0",
+                font=ctk.CTkFont(size=FONT_MD, weight="bold"), text_color=ACCENT).pack()
+        except Exception:
+            pass
 
     # ─── CENTER ──────────────────────────────────
     def _create_center(self):
@@ -342,18 +665,17 @@ class MainWindow:
         overlay.place(relx=0.5, rely=0.5, anchor="center")
 
         self.title_lbl = ctk.CTkLabel(overlay, text="A T L A S",
-            font=ctk.CTkFont(size=26, weight="bold"), text_color=ACCENT)
+            font=ctk.CTkFont(size=30, weight="bold"), text_color=ACCENT)
         self.title_lbl.pack()
 
         status_f = ctk.CTkFrame(overlay, fg_color="transparent")
-        status_f.pack(pady=(4, 0))
-        ctk.CTkLabel(status_f, text="●", font=ctk.CTkFont(size=10), text_color="#00cc44").pack(side="left", padx=(0, 4))
-        ctk.CTkLabel(status_f, text="Listening for wake word...",
-            font=ctk.CTkFont(size=10), text_color=TEXT_DIM).pack(side="left")
+        status_f.pack(pady=(6, 0))
+        ctk.CTkLabel(status_f, text="●", font=ctk.CTkFont(size=11), text_color="#00cc44").pack(side="left", padx=(0, 5))
+        ctk.CTkLabel(status_f, text=self._tr("listening"),
+            font=ctk.CTkFont(size=FONT_SM), text_color=TEXT_DIM).pack(side="left")
 
-        # collapsible left tab mock
-        tab = ctk.CTkLabel(center, text="◀", font=ctk.CTkFont(size=10),
-            fg_color="#2a1a44", text_color="#9966ff", corner_radius=4, width=14, height=30)
+        tab = ctk.CTkLabel(center, text="◀", font=ctk.CTkFont(size=11),
+            fg_color="#2a1a44", text_color="#9966ff", corner_radius=4, width=16, height=34)
         tab.place(relx=0, rely=0.5, anchor="w")
 
     def _on_resize(self, e):
@@ -364,8 +686,8 @@ class MainWindow:
             self.anim.cy = e.height // 2
 
     def _start_anim(self):
-        w = self.canvas.winfo_width() or 400
-        h = self.canvas.winfo_height() or 400
+        w = self.canvas.winfo_width() or 500
+        h = self.canvas.winfo_height() or 500
         self.anim = AtlasAnim(self.canvas, w, h)
         self.anim.draw()
 
@@ -377,62 +699,92 @@ class MainWindow:
         p.grid_rowconfigure(2, weight=1)
 
         hdr = ctk.CTkFrame(p, fg_color="transparent")
-        hdr.grid(row=0, column=0, padx=10, pady=(10, 4), sticky="ew")
-        ctk.CTkLabel(hdr, text="Conversation", font=ctk.CTkFont(size=12, weight="bold"),
+        hdr.grid(row=0, column=0, padx=12, pady=(12, 6), sticky="ew")
+        ctk.CTkLabel(hdr, text=self._tr("conversation"), font=ctk.CTkFont(size=FONT_MD, weight="bold"),
             text_color=TEXT_BRIGHT).pack(side="left")
-        ctk.CTkLabel(hdr, text="🗑  ⬇", font=ctk.CTkFont(size=10), text_color=TEXT_DIM).pack(side="right")
+        ctk.CTkLabel(hdr, text="🗑  ⬇", font=ctk.CTkFont(size=FONT_SM), text_color=TEXT_DIM).pack(side="right")
 
-        chat_area = ctk.CTkFrame(p, fg_color="#060a14", corner_radius=8)
-        chat_area.grid(row=2, column=0, padx=10, pady=4, sticky="nsew")
-        chat_area.grid_columnconfigure(0, weight=1)
-        chat_area.grid_rowconfigure(1, weight=1)
+        self.chat_area = ctk.CTkFrame(p, fg_color="#060a14", corner_radius=8)
+        self.chat_area.grid(row=2, column=0, padx=12, pady=4, sticky="nsew")
+        self.chat_area.grid_columnconfigure(0, weight=1)
+        self.chat_area.grid_rowconfigure(1, weight=1)
 
-        bubble = ctk.CTkFrame(chat_area, fg_color="#0c1428", corner_radius=8)
-        bubble.grid(row=0, column=0, padx=6, pady=(6, 2), sticky="ew")
-        bubble.grid_columnconfigure(0, weight=1)
-        ctk.CTkLabel(bubble,
-            text="Hello, I am ATLAS.\nBackend is offline.\nSome features may be limited.\nHow can I assist you today, sir?",
-            font=ctk.CTkFont(size=9), text_color=TEXT_BRIGHT, justify="left", wraplength=240).grid(
-            row=0, column=0, padx=8, pady=8, sticky="w")
-        ctk.CTkLabel(p, text="2:45 PM", font=ctk.CTkFont(size=8), text_color=TEXT_DIM).grid(
-            row=3, column=0, padx=16, pady=(0, 6), sticky="w")
+        self.chat_canvas = Canvas(self.chat_area, bg="#060a14", highlightthickness=0, borderwidth=0)
+        self.chat_canvas.grid(row=0, column=0, sticky="nsew")
+        self.chat_canvas.grid_rowconfigure(0, weight=1)
+
+        self.chat_inner = ctk.CTkFrame(self.chat_canvas, fg_color="transparent")
+        self.chat_canvas.create_window((0, 0), window=self.chat_inner, anchor="nw", tags="inner")
+
+        self.chat_scroll = ctk.CTkScrollbar(self.chat_area, orientation="vertical", command=self.chat_canvas.yview)
+        self.chat_scroll.grid(row=0, column=1, sticky="ns")
+        self.chat_canvas.configure(yscrollcommand=self.chat_scroll.set)
+
+        self.chat_inner.bind("<Configure>", lambda e: self.chat_canvas.configure(scrollregion=self.chat_canvas.bbox("all")))
+        self.chat_canvas.bind("<Configure>", self._on_chat_resize)
+
+        self._add_chat_message("assistant", self._tr("welcome_msg"))
+
+        self.chat_time_lbl = ctk.CTkLabel(p, text=datetime.now().strftime("%I:%M %p").lstrip('0'),
+            font=ctk.CTkFont(size=FONT_XS), text_color=TEXT_DIM)
+        self.chat_time_lbl.grid(row=3, column=0, padx=18, pady=(4, 8), sticky="w")
+
+    def _on_chat_resize(self, e):
+        self.chat_canvas.itemconfig("inner", width=e.width)
+
+    def _add_chat_message(self, role, text):
+        bubble = ctk.CTkFrame(self.chat_inner, fg_color="#0c1428" if role == "assistant" else "#0a2233",
+            corner_radius=8)
+        bubble.pack(fill="x", padx=6, pady=4)
+        ctk.CTkLabel(bubble, text=text, font=ctk.CTkFont(size=FONT_SM),
+            text_color=TEXT_BRIGHT, justify="left", wraplength=260).pack(padx=10, pady=8, anchor="w")
+        self.chat_canvas.yview_moveto(1.0)
 
     # ─── BOTTOM BAR ──────────────────────────────
     def _create_bottombar(self):
-        bar = ctk.CTkFrame(self.window, fg_color="#080b14", corner_radius=0, height=56)
-        bar.grid(row=2, column=0, columnspan=3, sticky="ew", padx=0, pady=0)
+        bar = ctk.CTkFrame(self.window, fg_color="#080b14", corner_radius=0, height=62)
+        bar.grid(row=2, column=0, columnspan=3, sticky="ew")
         bar.grid_propagate(False)
 
         content = ctk.CTkFrame(bar, fg_color="transparent")
         content.place(relx=0.5, rely=0.5, anchor="center")
 
-        # mode icons
         for icon in ["🎥", "🎤", "⌨️"]:
-            lbl = ctk.CTkLabel(content, text=icon, font=ctk.CTkFont(size=14), text_color=TEXT_DIM)
-            lbl.pack(side="left", padx=4)
+            lbl = ctk.CTkLabel(content, text=icon, font=ctk.CTkFont(size=18), text_color=TEXT_DIM)
+            lbl.pack(side="left", padx=6)
 
-        # input field
-        self.entry = ctk.CTkEntry(content, width=400, height=32,
+        self.chat_entry = ctk.CTkEntry(content, width=420, height=36,
             fg_color="#0a1220", border_color="#1a2a44", text_color=TEXT_BRIGHT,
-            placeholder_text="Type a message...")
-        self.entry.pack(side="left", padx=(10, 6))
+            placeholder_text=self._tr("type_msg"), font=ctk.CTkFont(size=FONT_SM))
+        self.chat_entry.pack(side="left", padx=(12, 8))
+        self.chat_entry.bind("<Return>", self._send_message)
 
-        send = ctk.CTkLabel(content, text="📤", font=ctk.CTkFont(size=16), text_color=TEXT_DIM)
-        send.pack(side="left")
+        send_btn = ctk.CTkButton(content, text="📤", command=self._send_message,
+            fg_color="#004466", hover_color="#006688", width=40, height=36,
+            corner_radius=8, font=ctk.CTkFont(size=16))
+        send_btn.pack(side="left")
 
-        # floating button bottom right
-        float_btn = ctk.CTkLabel(bar, text="⚙", font=ctk.CTkFont(size=14),
-            fg_color="#2a1a44", text_color="#9966ff", corner_radius=20, width=32, height=32)
-        float_btn.place(relx=1, rely=1, anchor="se", x=-12, y=-8)
+    def _send_message(self, e=None):
+        msg = self.chat_entry.get().strip()
+        if not msg:
+            return
+        self._add_chat_message("user", msg)
+        self.chat_entry.delete(0, "end")
+        self.chat_time_lbl.configure(text=datetime.now().strftime("%I:%M %p").lstrip('0'))
 
-    # ─── CONTENT PANELS (Config, etc) ────────────
+        def respond():
+            self.window.after(500, lambda: self._add_chat_message("assistant",
+                self._tr("welcome_msg").split("\n")[0] + "\n\n" +
+                ("Mensaje recibido: " if self.lang_code == "es" else "Message received: ") + f'"{msg}"'))
+        threading.Thread(target=respond, daemon=True).start()
+
+    # ─── CONFIG OVERLAY ──────────────────────────
     def _make_overlay(self):
-        if hasattr(self, 'overlay') and self.overlay:
-            self.overlay.destroy()
-        self.overlay = ctk.CTkFrame(self.window, fg_color="#060a14")
-        self.overlay.grid(row=1, column=0, columnspan=3, sticky="nsew", padx=40, pady=20)
+        self._close_overlay()
+        self.overlay = ctk.CTkFrame(self.window, fg_color="#060a14", corner_radius=0)
+        self.overlay.grid(row=1, column=0, columnspan=3, sticky="nsew", padx=80, pady=40)
         self.overlay.grid_columnconfigure(0, weight=1)
-        self.overlay.grid_rowconfigure(10, weight=1)
+        self.overlay.grid_rowconfigure(1, weight=1)
         return self.overlay
 
     def _close_overlay(self, e=None):
@@ -444,58 +796,329 @@ class MainWindow:
         parent = self._make_overlay()
 
         top = ctk.CTkFrame(parent, fg_color="transparent")
-        top.grid(row=0, column=0, padx=20, pady=(15, 10), sticky="ew")
-        ctk.CTkLabel(top, text="⚙ Configuración", font=ctk.CTkFont(size=18, weight="bold"),
-            text_color=ACCENT).pack(side="left")
-        ctk.CTkLabel(top, text="✕", font=ctk.CTkFont(size=16), text_color=TEXT_DIM).pack(side="right")
-        top.bind("<Button-1>", self._close_overlay)
+        top.grid(row=0, column=0, padx=30, pady=(20, 10), sticky="ew")
+        ctk.CTkLabel(top, text="⚙ " + self._tr("config_title"),
+            font=ctk.CTkFont(size=24, weight="bold"), text_color=ACCENT).pack(side="left")
+        ctk.CTkButton(top, text="✕ " + self._tr("close_btn"),
+            command=self._close_overlay,
+            fg_color="#331122", hover_color="#553344", text_color="#cc6677",
+            width=90, height=32, corner_radius=6, font=ctk.CTkFont(size=FONT_SM)
+        ).pack(side="right")
 
-        f = ctk.CTkFrame(parent, fg_color="transparent")
-        f.grid(row=1, column=0, padx=20, pady=5, sticky="nsew")
-        f.grid_columnconfigure(0, weight=1)
+        tabview = ctk.CTkTabview(parent,
+            fg_color="#080c18", segmented_button_fg_color="#0a1220",
+            segmented_button_selected_color="#004466",
+            segmented_button_selected_hover_color="#006688",
+            segmented_button_unselected_color="#0a1220",
+            segmented_button_unselected_hover_color="#112244",
+            text_color=TEXT_BRIGHT, corner_radius=10, height=420)
+        tabview.grid(row=1, column=0, padx=30, pady=10, sticky="nsew")
 
-        ctk.CTkLabel(f, text="API Key de Ollama Cloud:").grid(row=0, column=0, pady=5, sticky="w")
-        self.api_key_entry = ctk.CTkEntry(f, width=380, show="*")
-        self.api_key_entry.grid(row=1, column=0, pady=(0, 10), sticky="w")
-        saved = os.getenv("OLLAMA_API_KEY", "")
-        if saved:
-            self.api_key_entry.insert(0, saved)
+        # ── Tab: Clima ──
+        t_clima = tabview.add("🌤  " + self._tr("tab_clima"))
+        t_clima.grid_columnconfigure(0, weight=1)
+        t_clima.grid_rowconfigure(4, weight=1)
 
-        ctk.CTkLabel(f, text="Modelo:").grid(row=2, column=0, pady=5, sticky="w")
+        ctk.CTkLabel(t_clima, text=self._tr("clima_search"),
+            font=ctk.CTkFont(size=FONT_MD, weight="bold"), text_color=TEXT_BRIGHT
+        ).grid(row=0, column=0, padx=20, pady=(25, 8), sticky="w")
+
+        search_f = ctk.CTkFrame(t_clima, fg_color="transparent")
+        search_f.grid(row=1, column=0, padx=20, pady=4, sticky="w")
+        self.city_entry = ctk.CTkEntry(search_f, width=300, height=36,
+            font=ctk.CTkFont(size=FONT_SM), fg_color="#0a1220", border_color="#1a2a44")
+        self.city_entry.pack(side="left")
+        ctk.CTkButton(search_f, text="🔍 " + self._tr("clima_search_btn"),
+            command=self._search_cities,
+            fg_color="#004466", hover_color="#006688", corner_radius=8, height=34, width=90,
+            font=ctk.CTkFont(size=FONT_SM)
+        ).pack(side="left", padx=(8, 0))
+        ctk.CTkLabel(t_clima, text=self._tr("clima_example"),
+            font=ctk.CTkFont(size=FONT_XS), text_color=TEXT_DIM
+        ).grid(row=2, column=0, padx=20, pady=(0, 6), sticky="w")
+
+        self.search_results = ctk.CTkScrollableFrame(t_clima, fg_color="#060a14",
+            corner_radius=8, height=120)
+        self.search_results.grid(row=3, column=0, padx=20, pady=4, sticky="ew")
+
+        self.weather_preview = ctk.CTkFrame(t_clima, fg_color="#060a14", corner_radius=10,
+            border_width=1, border_color="#1a2a44")
+        self.weather_preview.grid(row=5, column=0, padx=20, pady=(6, 16), sticky="ew")
+        self.weather_preview.grid_columnconfigure(0, weight=1)
+
+        preview_inner = ctk.CTkFrame(self.weather_preview, fg_color="transparent")
+        preview_inner.grid(row=0, column=0, padx=16, pady=10, sticky="ew")
+        preview_inner.grid_columnconfigure(1, weight=1)
+
+        ctk.CTkLabel(preview_inner, text=self._tr("clima_preview"),
+            font=ctk.CTkFont(size=FONT_SM, weight="bold"), text_color=TEXT_BRIGHT
+        ).grid(row=0, column=0, columnspan=3, pady=(0, 8), sticky="w")
+
+        self.pv_icon = ctk.CTkLabel(preview_inner, text="☁", font=ctk.CTkFont(size=26), text_color="#7799bb")
+        self.pv_icon.grid(row=1, column=0, rowspan=4, padx=(0, 14), sticky="ns")
+
+        labels = [
+            ("clima_city", "pv_city", "--"),
+            ("clima_temp", "pv_temp", "--"),
+            ("clima_desc", "pv_desc", "--"),
+            ("clima_hum", "pv_hum", "--"),
+            ("clima_wind", "pv_wind", "--"),
+            ("clima_feel", "pv_feel", "--"),
+        ]
+        self.pv_labels = {}
+        for i, (lbl_key, key, default) in enumerate(labels):
+            ctk.CTkLabel(preview_inner, text=self._tr(lbl_key), font=ctk.CTkFont(size=FONT_XS),
+                text_color=TEXT_DIM).grid(row=1+i, column=1, sticky="w")
+            lbl2 = ctk.CTkLabel(preview_inner, text=default, font=ctk.CTkFont(size=FONT_XS),
+                text_color=TEXT_BRIGHT)
+            lbl2.grid(row=1+i, column=2, padx=(10, 0), sticky="w")
+            self.pv_labels[key] = lbl2
+
+        ctk.CTkButton(t_clima, text="💾 " + self._tr("clima_save_btn"),
+            command=self._save_weather_only,
+            fg_color="#0a1a33", hover_color="#112244", corner_radius=8, height=34,
+            font=ctk.CTkFont(size=FONT_SM)
+        ).grid(row=6, column=0, padx=20, pady=(0, 16), sticky="w")
+
+        # ── Tab: API + Modelo ──
+        t_api = tabview.add("🔑🤖  " + self._tr("tab_api"))
+        t_api.grid_columnconfigure(0, weight=1)
+
+        ctk.CTkLabel(t_api, text=self._tr("api_key_label"),
+            font=ctk.CTkFont(size=FONT_MD, weight="bold"), text_color=TEXT_BRIGHT
+        ).grid(row=0, column=0, padx=20, pady=(25, 8), sticky="w")
+        self.api_key_entry = ctk.CTkEntry(t_api, width=480, show="*", height=36,
+            font=ctk.CTkFont(size=FONT_SM), fg_color="#0a1220", border_color="#1a2a44")
+        self.api_key_entry.grid(row=1, column=0, padx=20, pady=(0, 4), sticky="w")
+        saved_key = os.getenv("OLLAMA_API_KEY", "")
+        if saved_key:
+            self.api_key_entry.insert(0, saved_key)
+        ctk.CTkLabel(t_api, text=self._tr("api_key_hint"),
+            font=ctk.CTkFont(size=FONT_XS), text_color=TEXT_DIM
+        ).grid(row=2, column=0, padx=20, pady=(0, 15), sticky="w")
+
+        sep = ctk.CTkFrame(t_api, height=1, fg_color="#1a2a44")
+        sep.grid(row=3, column=0, padx=20, sticky="ew", pady=5)
+
+        ctk.CTkLabel(t_api, text=self._tr("model_label"),
+            font=ctk.CTkFont(size=FONT_MD, weight="bold"), text_color=TEXT_BRIGHT
+        ).grid(row=4, column=0, padx=20, pady=(15, 8), sticky="w")
         self.model_var = ctk.StringVar(value=os.getenv("OLLAMA_MODEL", "llama3"))
-        self.model_menu = ctk.CTkOptionMenu(f, values=["llama3", "mistral", "codellama", "gemma", "phi"],
-            variable=self.model_var, fg_color="#0a1a33", button_color="#004466")
-        self.model_menu.grid(row=3, column=0, pady=(0, 10), sticky="w")
+        self.model_menu = ctk.CTkOptionMenu(t_api,
+            values=["llama3", "mistral", "codellama", "gemma", "phi", "deepseek-coder"],
+            variable=self.model_var, fg_color="#0a1a33", button_color="#004466",
+            font=ctk.CTkFont(size=FONT_SM), dropdown_font=ctk.CTkFont(size=FONT_SM), width=220)
+        self.model_menu.grid(row=5, column=0, padx=20, pady=(0, 4), sticky="w")
+        ctk.CTkLabel(t_api, text=self._tr("model_hint"),
+            font=ctk.CTkFont(size=FONT_XS), text_color=TEXT_DIM
+        ).grid(row=6, column=0, padx=20, pady=(0, 15), sticky="w")
 
-        ctk.CTkLabel(f, text="Temperatura (0.0 - 1.0):").grid(row=4, column=0, pady=5, sticky="w")
-        tf = ctk.CTkFrame(f, fg_color="transparent")
-        tf.grid(row=5, column=0, pady=5, sticky="w")
+        ctk.CTkLabel(t_api, text=self._tr("temp_label"),
+            font=ctk.CTkFont(size=FONT_MD, weight="bold"), text_color=TEXT_BRIGHT
+        ).grid(row=7, column=0, padx=20, pady=(10, 8), sticky="w")
+        tf = ctk.CTkFrame(t_api, fg_color="transparent")
+        tf.grid(row=8, column=0, padx=20, pady=5, sticky="w")
         self.temp_slider = ctk.CTkSlider(tf, from_=0, to=1, number_of_steps=20,
-            fg_color="#112244", progress_color=ACCENT, button_color="#0088cc")
+            width=280, height=18,
+            fg_color="#112244", progress_color=ACCENT, button_color="#0088cc",
+            button_hover_color="#00aaee")
         self.temp_slider.pack(side="left")
         self.temp_slider.set(float(os.getenv("OLLAMA_TEMPERATURE", "0.7")))
-        self.temp_label = ctk.CTkLabel(tf, text=f"{self.temp_slider.get():.1f}")
-        self.temp_label.pack(side="left", padx=(10, 0))
+        self.temp_label = ctk.CTkLabel(tf, text=f"{self.temp_slider.get():.1f}",
+            font=ctk.CTkFont(size=FONT_MD))
+        self.temp_label.pack(side="left", padx=(12, 0))
         self.temp_slider.configure(command=lambda v: self.temp_label.configure(text=f"{v:.1f}"))
+        ctk.CTkLabel(t_api, text=self._tr("temp_hint"),
+            font=ctk.CTkFont(size=FONT_XS), text_color=TEXT_DIM
+        ).grid(row=9, column=0, padx=20, pady=(2, 15), sticky="w")
 
-        ctk.CTkButton(f, text="💾 Guardar configuración", command=self._save_config,
-            fg_color="#004466", hover_color="#006688", corner_radius=8, width=200
-        ).grid(row=6, column=0, padx=0, pady=20, sticky="w")
+        ctk.CTkButton(t_api, text="💾 " + self._tr("save_api_btn"),
+            command=lambda: self._save_single("api_model"),
+            fg_color="#004466", hover_color="#006688", corner_radius=8, height=34,
+            font=ctk.CTkFont(size=FONT_SM)
+        ).grid(row=10, column=0, padx=20, pady=(10, 20), sticky="w")
 
-    def _save_config(self):
-        k = self.api_key_entry.get()
-        m = self.model_var.get()
-        t = str(self.temp_slider.get())
-        if not k:
-            messagebox.showwarning("Advertencia", "La API Key no puede estar vacía.")
+        # ── Tab: General ──
+        t_gen = tabview.add("⚙  " + self._tr("tab_general"))
+        t_gen.grid_columnconfigure(0, weight=1)
+
+        ctk.CTkLabel(t_gen, text=self._tr("gen_label"),
+            font=ctk.CTkFont(size=FONT_MD, weight="bold"), text_color=TEXT_BRIGHT
+        ).grid(row=0, column=0, padx=20, pady=(25, 8), sticky="w")
+        ctk.CTkLabel(t_gen, text=self._tr("gen_hint"),
+            font=ctk.CTkFont(size=FONT_SM), text_color=TEXT_DIM, justify="left"
+        ).grid(row=1, column=0, padx=20, pady=10, sticky="w")
+
+        ctk.CTkLabel(t_gen, text=self._tr("lang_label"),
+            font=ctk.CTkFont(size=FONT_MD, weight="bold"), text_color=TEXT_BRIGHT
+        ).grid(row=2, column=0, padx=20, pady=(15, 8), sticky="w")
+        self.lang_var = ctk.StringVar(value=self.lang_code)
+        lang_menu = ctk.CTkOptionMenu(t_gen,
+            values=["es - Español", "en - English"],
+            command=self._change_lang,
+            fg_color="#0a1a33", button_color="#004466",
+            font=ctk.CTkFont(size=FONT_SM), dropdown_font=ctk.CTkFont(size=FONT_SM), width=200)
+        lang_menu.grid(row=3, column=0, padx=20, pady=(0, 4), sticky="w")
+        lang_menu.set("es - Español" if self.lang_code == "es" else "en - English")
+
+        ctk.CTkButton(t_gen, text="💾 " + self._tr("save_all_btn"),
+            command=self._save_config_all,
+            fg_color="#004466", hover_color="#006688", corner_radius=8, height=38,
+            font=ctk.CTkFont(size=FONT_SM)
+        ).grid(row=4, column=0, padx=20, pady=(25, 20), sticky="w")
+
+    # ─── LANGUAGE ────────────────────────────────
+    def _change_lang(self, choice):
+        if choice.startswith("es"):
+            self.lang_code = "es"
+        else:
+            self.lang_code = "en"
+        set_key(ENV_PATH, "ATLAS_LANG", self.lang_code)
+        self._reload_lang()
+        messagebox.showinfo(self._tr("config_title"),
+            f"{self._tr('lang_saved')}: {self.lang_code.upper()}")
+        self._close_overlay()
+        self._rebuild_ui()
+        self._fetch_weather()
+
+    # ─── WEATHER SEARCH ──────────────────────────
+    def _search_cities(self):
+        query = self.city_entry.get().strip()
+        if not query:
+            messagebox.showwarning("Advertencia" if self.lang_code == "es" else "Warning",
+                self._tr("enter_city"))
             return
-        os.makedirs(os.path.dirname(ENV_PATH), exist_ok=True)
-        set_key(ENV_PATH, "OLLAMA_API_KEY", k)
-        set_key(ENV_PATH, "OLLAMA_MODEL", m)
-        set_key(ENV_PATH, "OLLAMA_TEMPERATURE", t)
-        messagebox.showinfo("Guardado", "Configuración guardada correctamente.")
 
-    # placeholder methods for sidebar nav compatibility
+        for w in self.search_results.winfo_children():
+            w.destroy()
+
+        ctk.CTkLabel(self.search_results, text=self._tr("searching"),
+            font=ctk.CTkFont(size=FONT_XS), text_color=TEXT_DIM).pack(pady=6)
+
+        def search():
+            try:
+                url = "https://nominatim.openstreetmap.org/search"
+                params = {"q": query, "format": "json", "limit": 6, "featuretype": "city"}
+                headers = {"User-Agent": "ATLAS-Assistant/1.0"}
+                resp = requests.get(url, params=params, headers=headers, timeout=8)
+                results = resp.json() if resp.status_code == 200 else []
+            except Exception:
+                results = []
+            self.window.after(0, lambda: self._show_city_results(results))
+
+        threading.Thread(target=search, daemon=True).start()
+
+    def _show_city_results(self, results):
+        for w in self.search_results.winfo_children():
+            w.destroy()
+
+        if not results:
+            ctk.CTkLabel(self.search_results, text=self._tr("no_results"),
+                font=ctk.CTkFont(size=FONT_XS), text_color=TEXT_DIM).pack(pady=8)
+            return
+
+        for r in results:
+            display_name = r.get("display_name", "")
+            lat, lon = r.get("lat", ""), r.get("lon", "")
+            name_parts = display_name.split(",")
+            city = name_parts[0].strip() if name_parts else display_name
+            extra = name_parts[1].strip() if len(name_parts) > 1 else ""
+            country = name_parts[-1].strip() if len(name_parts) > 1 else ""
+            short = f"{city}, {extra} — {country}" if extra else display_name
+
+            btn = ctk.CTkButton(self.search_results, text=short,
+                fg_color="transparent", hover_color="#0a1a33",
+                text_color=TEXT_BRIGHT, anchor="w", height=28,
+                font=ctk.CTkFont(size=FONT_XS), corner_radius=4)
+            btn.pack(fill="x", padx=4, pady=1)
+            btn.bind("<Button-1>", lambda e, n=display_name, lt=lat, ln=lon: self._select_city(n, lt, ln))
+
+    def _select_city(self, name, lat, lon):
+        self.city_entry.delete(0, "end")
+        self.city_entry.insert(0, name)
+
+        for w in self.search_results.winfo_children():
+            w.destroy()
+        ctk.CTkLabel(self.search_results, text=self._tr("loading_weather"),
+            font=ctk.CTkFont(size=FONT_XS), text_color=TEXT_DIM).pack(pady=6)
+
+        def fetch():
+            try:
+                wurl = f"https://wttr.in/{lat},{lon}?format=j1&lang={self.lang_code}"
+                resp = requests.get(wurl, timeout=8)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    curr = data["current_condition"][0]
+                    area = data.get("nearest_area", [{}])[0]
+                    resolved = area.get("areaName", [{}])[0].get("value", "")
+                    region = area.get("region", [{}])[0].get("value", "")
+                    country = area.get("country", [{}])[0].get("value", "")
+                    full_city = f"{resolved}, {region}, {country}" if region else resolved
+                    info = {
+                        "city": full_city,
+                        "temp": curr["temp_C"],
+                        "desc": curr["weatherDesc"][0]["value"],
+                        "humidity": curr["humidity"],
+                        "wind": curr["windspeedKmph"],
+                        "feels": curr["FeelsLikeC"],
+                    }
+                    self.window.after(0, lambda: self._update_preview(info))
+                else:
+                    self.window.after(0, lambda: self.pv_labels["pv_city"].configure(text=self._tr("weather_error")))
+            except Exception:
+                self.window.after(0, lambda: self.pv_labels["pv_city"].configure(text=self._tr("conn_error")))
+
+        threading.Thread(target=fetch, daemon=True).start()
+
+    def _update_preview(self, info):
+        self.pv_labels["pv_city"].configure(text=info["city"])
+        self.pv_labels["pv_temp"].configure(text=f"{info['temp']}°C")
+        self.pv_labels["pv_desc"].configure(text=info["desc"])
+        self.pv_labels["pv_hum"].configure(text=f"{info['humidity']}%")
+        self.pv_labels["pv_wind"].configure(text=f"{info['wind']} km/h")
+        self.pv_labels["pv_feel"].configure(text=f"{info['feels']}°C")
+
+    # ─── SAVE METHODS ────────────────────────────
+    def _save_weather_only(self):
+        full = self.city_entry.get().strip()
+        if not full:
+            messagebox.showwarning("Advertencia" if self.lang_code == "es" else "Warning",
+                self._tr("save_city_first"))
+            return
+        city = full.split(",")[0].strip()
+        os.makedirs(os.path.dirname(ENV_PATH), exist_ok=True)
+        set_key(ENV_PATH, "WEATHER_CITY", city)
+        messagebox.showinfo(self._tr("config_title"), f"{self._tr('city_saved')} {city}")
+        self._fetch_weather()
+
+    def _save_single(self, section):
+        if section == "api_model":
+            k = self.api_key_entry.get()
+            if not k:
+                messagebox.showwarning("Advertencia" if self.lang_code == "es" else "Warning",
+                    self._tr("api_empty_warn"))
+                return
+            set_key(ENV_PATH, "OLLAMA_API_KEY", k)
+            m = self.model_var.get()
+            t = str(self.temp_slider.get())
+            set_key(ENV_PATH, "OLLAMA_MODEL", m)
+            set_key(ENV_PATH, "OLLAMA_TEMPERATURE", t)
+            messagebox.showinfo(self._tr("config_title"), self._tr("api_saved"))
+
+    def _save_config_all(self):
+        full = self.city_entry.get().strip()
+        if full:
+            city = full.split(",")[0].strip()
+            set_key(ENV_PATH, "WEATHER_CITY", city)
+        k = self.api_key_entry.get()
+        if k:
+            set_key(ENV_PATH, "OLLAMA_API_KEY", k)
+        set_key(ENV_PATH, "OLLAMA_MODEL", self.model_var.get())
+        set_key(ENV_PATH, "OLLAMA_TEMPERATURE", str(self.temp_slider.get()))
+        messagebox.showinfo(self._tr("config_title"), self._tr("all_saved"))
+        self._close_overlay()
+        self._fetch_weather()
+
     def show_home(self):
         self._close_overlay()
 

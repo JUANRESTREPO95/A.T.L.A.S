@@ -5,6 +5,12 @@ import subprocess
 import pyautogui
 import pyperclip
 import time
+from src.modules.system_info import (
+    get_system_summary, get_cpu_info, get_ram_info, get_disk_info,
+    get_process_list, get_file_list, get_projects, get_network_info,
+)
+
+HOME = os.path.expanduser("~")
 
 pyautogui.FAILSAFE = True
 
@@ -220,6 +226,48 @@ COMMANDS = [
         "fn": "_maximize_window",
         "desc": "maximiza ventana",
     },
+    # 14 — Información del sistema
+    {
+        "patterns": [
+            r"(?:información|informacion|info|resumen)\s+(?:del|del|del)\s+(?:sistema|pc|computador|equipo)",
+            r"(?:qué|que|qué)\s+(?:hay|tengo|tiene)\s+(?:en\s+)?(?:mi\s+)?(?:pc|computador|computadora|ordenador|equipo|sistema)",
+        ],
+        "fn": "_system_info",
+        "desc": "información del sistema",
+    },
+    # 15 — Recursos (CPU, RAM, Disco)
+    {
+        "patterns": [
+            r"(?:recursos|recursos\s+del\s+sistema|estado\s+del\s+pc|monitoreo)",
+            r"(?:cu[aá]nta|que|qué|como\s+est[aá])\s+(?:ram|memoria)\s+(?:tengo|hay|usada|libre|disponible)",
+            r"(?:cu[aá]nto|que|qué|como\s+est[aá])\s+(?:el\s+|la\s+)?(?:cpu|procesador|disco|almacenamiento)\s+(?:tengo|hay|usado|libre|disponible)",
+            r"(?:cu[aá]nta|que|qué|como\s+est[aá])\s+(?:la\s+)?(?:ram|memoria)",
+            r"(?:cu[aá]nto|que|qué|como\s+est[aá])\s+(?:el\s+|la\s+)?(?:cpu|procesador|disco)",
+        ],
+        "fn": "_system_resources",
+        "desc": "recursos del sistema",
+    },
+    # 16 — Procesos
+    {
+        "patterns": [
+            r"(?:procesos|programas)\s+(?:activos|abiertos|ejecutando|corriendo|ejecutándose|en\s+ejecución)",
+            r"(?:qué|que|qué|muestra|lista)\s+(?:procesos|programas)\s+(?:hay|est[aá]n|existen|corren|corriendo|tengo)",
+            r"top\s+(?:de\s+)?procesos",
+            r"(?:qué|que|qué)\s+(?:procesos|programas)\s+(?:hay|est[aá]n|existen|corren|corriendo|tengo)",
+        ],
+        "fn": "_process_list",
+        "desc": "lista procesos",
+    },
+    # 17 — Archivos en directorio
+    {
+        "patterns": [
+            r"(?:qué|que|qué|muestra|listame)\s+(?:hay|archivos|ficheros|carpetas|contenido)\s+(?:en\s+)?(descargas|downloads|documentos|documents|escritorio|desktop|proyectos|projects|home|tmp)",
+            r"(?:archivos|ficheros)\s+(?:en|de)\s+(descargas|downloads|documentos|documents|escritorio|desktop|proyectos|projects|home|tmp)",
+            r"(?:qué|que|qué)\s+(?:hay)\s+(?:en\s+)(descargas|downloads|documentos|documents|escritorio|desktop|proyectos|projects|home|tmp)",
+        ],
+        "fn": "_list_directory",
+        "desc": "lista archivos en directorio",
+    },
 ]
 
 
@@ -294,6 +342,46 @@ def _list_projects(*args):
         name = os.path.basename(path)
         lines.append(f"  • {name}  —  {path}")
     return "\n".join(lines)
+
+
+def _system_info(*args):
+    return get_system_summary() + "\n\n" + get_disk_info()
+
+
+def _system_resources(*args):
+    return f"{get_cpu_info()}\n{get_ram_info()}\n{get_disk_info()}"
+
+
+def _process_list(*args):
+    return get_process_list(20)
+
+
+DIR_MAP = {
+    "descargas": "Descargas",
+    "downloads": "Downloads",
+    "download": "Downloads",
+    "documentos": "Documentos",
+    "documents": "Documents",
+    "doc": "Documents",
+    "escritorio": "Escritorio",
+    "desktop": "Desktop",
+    "proyectos": "Proyectos",
+    "projects": "Proyectos",
+    "home": "",
+    "tmp": "/tmp",
+}
+
+
+def _list_directory(*args):
+    raw = " ".join(args).lower().strip() if args else ""
+    target = None
+    for key, path in DIR_MAP.items():
+        if key in raw:
+            target = os.path.join(HOME, path) if path else HOME
+            break
+    if not target:
+        target = HOME
+    return get_file_list(target)
 
 
 def _open_project(*args):

@@ -8,6 +8,7 @@ import requests
 from src.core.ollama_client import OllamaClient
 from src.modules.web_search import search_web
 from src.modules.pc_control import process_message
+from src.modules.system_info import detect_pc_query, get_pc_context
 
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("dark-blue")
@@ -862,18 +863,28 @@ class MainWindow:
             model = os.getenv("OLLAMA_MODEL", "llama3")
             temp = float(os.getenv("OLLAMA_TEMPERATURE", "0.7"))
 
-            update_thinking("🌐 Buscando en internet...")
-            tavily_key = os.getenv("TAVILY_API_KEY", "")
-            web_info = search_web(msg, tavily_api_key=tavily_key or None)
+            pc_context = get_pc_context(msg) if detect_pc_query(msg) else None
 
-            if web_info:
-                query = msg.replace(" ", "+")
-                webbrowser.open(f"https://www.google.com/search?q={query}")
+            web_info = None
+            if not pc_context:
+                update_thinking("🌐 Buscando en internet...")
+                tavily_key = os.getenv("TAVILY_API_KEY", "")
+                web_info = search_web(msg, tavily_api_key=tavily_key or None)
+                if web_info:
+                    query = msg.replace(" ", "+")
+                    webbrowser.open(f"https://www.google.com/search?q={query}")
 
             update_thinking("⏳ Pensando...")
             full = list(self.messages)
             today = datetime.now().strftime("%d/%m/%Y")
-            if web_info:
+
+            if pc_context:
+                user_msg_combined = (
+                    f"[Información del PC — {today}]\n{pc_context}\n\n"
+                    f"---\n{msg}\n\n"
+                    f"Usa la información del PC de arriba para responder."
+                )
+            elif web_info:
                 trimmed = "\n".join(web_info.split("\n")[:80])
                 user_msg_combined = (
                     f"[Contexto — {today}]\n{trimmed}\n\n"
@@ -882,6 +893,7 @@ class MainWindow:
                 )
             else:
                 user_msg_combined = f"[Contexto — {today}]\n\n{msg}"
+
             full.append({"role": "user", "content": user_msg_combined})
             ok, result = self.ollama.chat(model, full, temperature=temp)
             self.window.after(0, lambda: self._handle_chat_response(thinking_frame, ok, result, msg))

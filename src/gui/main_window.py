@@ -7,6 +7,7 @@ import psutil
 import requests
 from src.core.ollama_client import OllamaClient
 from src.modules.web_search import search_web
+from src.modules.pc_control import process_message
 
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("dark-blue")
@@ -837,6 +838,14 @@ class MainWindow:
                    if self.lang_code == "es"
                    else "⚠️ No connection to Ollama. Go to Settings → API + Model and verify your API key.")
             self._add_chat_message("assistant", txt)
+            return
+
+        handled, result = process_message(msg)
+        if handled:
+            self._add_chat_message("assistant", f"✅ {result}")
+            self.messages.append({"role": "user", "content": msg})
+            self.messages.append({"role": "assistant", "content": f"✅ {result}"})
+            self._save_memory()
             return
 
         thinking_frame = ctk.CTkFrame(self.chat_inner, fg_color="#0c1428", corner_radius=8)

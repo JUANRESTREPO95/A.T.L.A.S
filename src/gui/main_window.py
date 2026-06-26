@@ -854,18 +854,17 @@ class MainWindow:
             update_thinking("🌐 Buscando en internet...")
             web_info = search_web(msg)
 
-            user_content = msg
-            if web_info:
-                user_content = (
-                    f"{msg}\n\n"
-                    f"--- Información actual de internet ---\n"
-                    f"{web_info}\n"
-                    f"--- Fin de información ---\n\n"
-                    f"Usa la información anterior si es relevante para responder."
-                )
-
             update_thinking("⏳ Pensando...")
-            full = self.messages + [{"role": "user", "content": user_content}]
+            full = list(self.messages)
+            if web_info:
+                full.append({"role": "system", "content": (
+                    "INSTRUCCIÓN: Acabas de obtener la siguiente información actualizada de internet "
+                    "en tiempo real. Está 100% verificada y disponible para ti AHORA. "
+                    "Úsala obligatoriamente para responder la pregunta del usuario. "
+                    "No digas que no puedes buscar en internet porque YA tienes la información.\n\n"
+                    f"{web_info}"
+                )})
+            full.append({"role": "user", "content": msg})
             ok, result = self.ollama.chat(model, full, temperature=temp)
             self.window.after(0, lambda: self._handle_chat_response(thinking_frame, ok, result, msg))
 

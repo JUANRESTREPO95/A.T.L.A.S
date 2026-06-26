@@ -1,6 +1,6 @@
 import customtkinter as ctk
 from tkinter import messagebox, Canvas
-import os, math, random, threading, json
+import os, math, random, threading, json, webbrowser
 from dotenv import load_dotenv, set_key
 from datetime import datetime
 import psutil
@@ -865,6 +865,10 @@ class MainWindow:
             update_thinking("🌐 Buscando en internet...")
             tavily_key = os.getenv("TAVILY_API_KEY", "")
             web_info = search_web(msg, tavily_api_key=tavily_key or None)
+
+            if web_info:
+                query = msg.replace(" ", "+")
+                webbrowser.open(f"https://www.google.com/search?q={query}")
 
             update_thinking("⏳ Pensando...")
             full = list(self.messages)

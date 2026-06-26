@@ -6,7 +6,7 @@ from datetime import datetime
 import psutil
 import requests
 from src.core.ollama_client import OllamaClient
-from src.modules.web_search import search_web, search_instant
+from src.modules.web_search import search_web
 
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("dark-blue")
@@ -861,10 +861,9 @@ class MainWindow:
             if web_info:
                 user_msg_combined = (
                     f"{msg}\n\n"
-                    f"⬇️ INFORMACIÓN ACTUAL OBTENIDA DE INTERNET (DEBES USARLA):\n"
+                    f"⚠️ DATOS ACTUALES (IGNORA TU CONOCIMIENTO PREVIO, USA ESTO):\n"
                     f"{web_info}\n"
-                    f"⬆️ RESPONDE USANDO LA INFORMACIÓN DE ARRIBA. "
-                    f"No digas que no tienes acceso a internet porque YA te proporcioné la información."
+                    f"⚠️ FIN DE DATOS. RESponde usando SOLO la información de arriba."
                 )
             else:
                 user_msg_combined = msg

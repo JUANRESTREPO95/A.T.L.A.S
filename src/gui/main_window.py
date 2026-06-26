@@ -864,7 +864,8 @@ class MainWindow:
                 trimmed = "\n".join(web_info.split("\n")[:80])
                 user_msg_combined = (
                     f"[Contexto — {today}]\n{trimmed}\n\n"
-                    f"---\n{msg}"
+                    f"---\n{msg}\n\n"
+                    f"Importante: lista TODOS los elementos disponibles, no hagas resúmenes."
                 )
             else:
                 user_msg_combined = f"[Contexto — {today}]\n\n{msg}"

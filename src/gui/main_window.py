@@ -861,7 +861,7 @@ class MainWindow:
             full = list(self.messages)
             today = datetime.now().strftime("%d/%m/%Y")
             if web_info:
-                trimmed = "\n".join(web_info.split("\n")[:30])
+                trimmed = "\n".join(web_info.split("\n")[:80])
                 user_msg_combined = (
                     f"[Contexto — {today}]\n{trimmed}\n\n"
                     f"---\n{msg}"

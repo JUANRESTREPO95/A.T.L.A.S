@@ -5,7 +5,7 @@ from tavily import TavilyClient
 def tavily_search(query, api_key):
     try:
         client = TavilyClient(api_key=api_key)
-        resp = client.search(query, search_depth="advanced", max_results=5)
+        resp = client.search(query, search_depth="advanced", max_results=8)
         results = resp.get("results", [])
         if not results:
             return None
@@ -18,7 +18,7 @@ def tavily_search(query, api_key):
                 continue
             lines.append(f"• {title}")
             if content:
-                lines.append(f"  {content[:600]}")
+                lines.append(f"  {content[:2000]}")
             if url:
                 lines.append(f"  Fuente: {url}")
             lines.append("")

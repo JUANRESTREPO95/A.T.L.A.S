@@ -113,6 +113,7 @@ COMMANDS = [
     # 12 — Cerrar ventana
     {
         "patterns": [
+            r"(?:cierra|cerrar|cerrá|cerrame)\s+(todo|todas|todos|todito)",
             r"(?:cierra|cerrar|cerrá|cerrame)\s+(.+?)$",
             r"(?:cierra|cerrar|cerrá)\s+(?:la|el)\s+(?:ventana|app|programa|aplicación)$",
         ],
@@ -303,7 +304,7 @@ def _press_keys(*args):
     combo = args[0] if args else ""
     if not combo:
         return "¿Qué teclas quieres que presione?"
-    combo = combo.lower()
+    combo = combo.lower().strip()
     key_map = {
         "enter": "enter", "intro": "enter",
         "espacio": "space", "space": "space",
@@ -323,7 +324,9 @@ def _press_keys(*args):
     }
 
     combo = combo.replace(" + ", "+").replace(" mas ", "+").replace(" y ", "+")
-    parts = [p.strip() for p in combo.split("+")]
+    combo = re.sub(r"\s+", " ", combo)
+    parts = re.split(r"\s*\+\s*|\s+", combo)
+    parts = [p.strip().lower() for p in parts if p.strip()]
     keys = []
     for p in parts:
         p = p.strip()
@@ -332,6 +335,14 @@ def _press_keys(*args):
         else:
             keys.append(key_map.get(p, p))
 
+    dangerous = [("alt", "f4"), ("ctrl", "w"), ("ctrl", "q"), ("ctrl", "f4")]
+    if len(keys) > 1:
+        for danger in dangerous:
+            if all(dk in keys for dk in danger):
+                warn = _warn_if_atlas("cerrar ATLAS con teclas")
+                if warn:
+                    return warn
+
     if len(keys) == 1:
         pyautogui.press(keys[0])
     else:
@@ -339,12 +350,50 @@ def _press_keys(*args):
     return f"Presionando: {'+'.join(keys)}"
 
 
+def _is_atlas_active():
+    try:
+        import subprocess
+        result = subprocess.run(
+            ["xdotool", "getactivewindow", "getwindowname"],
+            capture_output=True, text=True, timeout=2
+        )
+        window_title = result.stdout.strip().lower()
+        return "atlas" in window_title
+    except Exception:
+        return False
+
+
+def _warn_if_atlas(action_desc: str) -> str | None:
+    if _is_atlas_active():
+        return f"⚠️ No puedo {action_desc} porque ATLAS está en primer plano. Pon otra ventana al frente primero."
+    return None
+
+
 def _close_window(*args):
+    raw = " ".join(args).lower() if args else ""
+    is_close_all = "todo" in raw or "todas" in raw or "todos" in raw
+    if is_close_all:
+        warn = _warn_if_atlas("cerrar todo")
+        if warn:
+            return warn
+        for _ in range(10):
+            if _is_atlas_active():
+                break
+            pyautogui.hotkey("alt", "f4")
+            time.sleep(0.15)
+        return "Cerrando ventanas (excepto ATLAS)..."
+
+    warn = _warn_if_atlas("cerrar esta ventana")
+    if warn:
+        return warn
     pyautogui.hotkey("alt", "f4")
     return "Cerrando ventana..."
 
 
 def _minimize_window(*args):
+    warn = _warn_if_atlas("minimizar ATLAS")
+    if warn:
+        return warn
     pyautogui.hotkey("win", "d")
     return "Minimizando todas las ventanas..."
 

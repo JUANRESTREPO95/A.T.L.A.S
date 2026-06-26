@@ -794,6 +794,8 @@ class MainWindow:
         bubble.pack(fill="x", padx=6, pady=4)
         ctk.CTkLabel(bubble, text=text, font=ctk.CTkFont(size=FONT_SM),
             text_color=TEXT_BRIGHT, justify="left", wraplength=260).pack(padx=10, pady=8, anchor="w")
+        self.chat_inner.update_idletasks()
+        self.chat_canvas.configure(scrollregion=self.chat_canvas.bbox("all"))
         self.chat_canvas.yview_moveto(1.0)
 
     # ─── BOTTOM BAR ──────────────────────────────
@@ -857,14 +859,16 @@ class MainWindow:
             update_thinking("⏳ Pensando...")
             full = list(self.messages)
             if web_info:
-                full.append({"role": "system", "content": (
-                    "INSTRUCCIÓN: Acabas de obtener la siguiente información actualizada de internet "
-                    "en tiempo real. Está 100% verificada y disponible para ti AHORA. "
-                    "Úsala obligatoriamente para responder la pregunta del usuario. "
-                    "No digas que no puedes buscar en internet porque YA tienes la información.\n\n"
-                    f"{web_info}"
-                )})
-            full.append({"role": "user", "content": msg})
+                user_msg_combined = (
+                    f"{msg}\n\n"
+                    f"⬇️ INFORMACIÓN ACTUAL OBTENIDA DE INTERNET (DEBES USARLA):\n"
+                    f"{web_info}\n"
+                    f"⬆️ RESPONDE USANDO LA INFORMACIÓN DE ARRIBA. "
+                    f"No digas que no tienes acceso a internet porque YA te proporcioné la información."
+                )
+            else:
+                user_msg_combined = msg
+            full.append({"role": "user", "content": user_msg_combined})
             ok, result = self.ollama.chat(model, full, temperature=temp)
             self.window.after(0, lambda: self._handle_chat_response(thinking_frame, ok, result, msg))
 
